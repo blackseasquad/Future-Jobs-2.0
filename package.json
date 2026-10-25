@@ -1,0 +1,26 @@
+{
+  "name": "future-jobs",
+  "version": "1.0.0",
+  "description": "Future Jobs – кариерни препоръки на база реални данни за пазара на труда (EduHack.bg)",
+  "type": "module",
+  "private": true,
+  "engines": {
+    "node": ">=22.13"
+  },
+  "scripts": {
+    "start": "node --disable-warning=ExperimentalWarning src/server.js",
+    "refresh": "node --disable-warning=ExperimentalWarning scripts/refresh.js",
+    "refresh:scheduled": "node --disable-warning=ExperimentalWarning scripts/refresh.js --scheduled",
+    "check-sources": "node --disable-warning=ExperimentalWarning scripts/check-sources.js",
+    "test": "node --disable-warning=ExperimentalWarning --test \"test/**/*.test.js\"",
+    "typecheck": "tsc -p tsconfig.json",
+    "check": "npm run typecheck && npm test"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.0",
+    "typescript": "^5.6.0"
+  },
+  "dependencies": {
+    "@vercel/blob": "^2.3.0"
+  }
+}

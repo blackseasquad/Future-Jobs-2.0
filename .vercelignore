@@ -1,0 +1,6 @@
+data/
+test/
+deploy/
+Dockerfile
+.env
+*.db

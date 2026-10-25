@@ -1,0 +1,14 @@
+# Уеб сървърът на Future Jobs (systemd)
+[Unit]
+Description=Future Jobs web server
+After=network-online.target
+
+[Service]
+WorkingDirectory=/opt/future-jobs
+EnvironmentFile=/opt/future-jobs/.env
+ExecStart=/usr/bin/node --disable-warning=ExperimentalWarning src/server.js
+Restart=on-failure
+User=futurejobs
+
+[Install]
+WantedBy=multi-user.target
