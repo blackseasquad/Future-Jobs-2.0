@@ -14,7 +14,7 @@ const KIND = { fact: 'Факт', forecast: 'Прогноза', model: 'Моде�
 export function buildResultEmail(rec, ai, publicUrl) {
   const occ = rec.occupations.map((o) => `<li><b>${esc(o.title)}</b> – съвпадение ${o.match}%` +
     (o.outlook.index !== null ? `, индекс на перспективата ${o.outlook.index}/100` : '') +
-    (o.salary?.bg ? `<br><small>Средна брутна заплата за групата „${esc(o.salary.group)}“ в България: ${o.salary.bg.annual.toLocaleString('bg-BG')} EUR/год. (Eurostat SES ${esc(o.salary.bg.period)})</small>` : '') +
+    (o.salary?.bg ? `<br><small>Средна брутна заплата в България: ≈ ${o.salary.bg.monthly.toLocaleString('bg-BG')} EUR/мес. – „${esc(o.salary.group)}“${o.salary.sector ? ` в „${esc(o.salary.sector)}“` : ''} (${o.salary.bg.isEstimate ? `оценка за ${esc(o.salary.bg.period)}` : `Eurostat SES ${esc(o.salary.bg.period)}`})</small>` : '') +
     '</li>').join('');
   const hz = rec.horizons.map((h) => `
     <h3 style="color:#0f5c4d;margin:24px 0 4px">${esc(h.label)}</h3><p style="margin:0 0 8px;color:#555">${esc(h.subtitle)}</p>

@@ -142,7 +142,7 @@ async function pageOccupations() {
 
 function salaryLine(s) {
   if (!s?.bg) return NA('няма данни за заплатите');
-  return `<b>≈ ${fmtNum(s.bg.monthlyApprox)} €/мес.</b> бруто <span class="muted small">(средно за „${esc(s.group)}“, България, ${esc(s.bg.period)})</span>`;
+  return `<b>≈ ${fmtNum(s.bg.monthly)} €/мес.</b> бруто <span class="muted small">(${s.bg.isEstimate ? `оценка за ${esc(s.bg.period)}` : esc(s.bg.period)} · „${esc(s.group)}“${s.sector ? ` в „${esc(s.sector)}“` : ''}, България)</span>`;
 }
 
 function occCard(o) {
@@ -175,10 +175,11 @@ async function pageOccupation(id) {
       ${signalsList(o.outlook.signals)}
     </div>
     <div class="card">
-      <h3>Заплащане ${kindBadge('fact')}</h3>
-      ${o.salary?.bg ? `<dl class="kv"><dt>България</dt><dd><b>${fmtNum(o.salary.bg.annual)} €/год.</b> (≈ ${fmtNum(o.salary.bg.monthlyApprox)} €/мес.)</dd>
-        ${o.salary.eu ? `<dt>ЕС-27</dt><dd>${fmtNum(o.salary.eu.annual)} €/год. (≈ ${fmtNum(o.salary.eu.monthlyApprox)} €/мес.)</dd>` : ''}
-        <dt>Група</dt><dd>${esc(o.salary.group)}</dd><dt>Период</dt><dd>${esc(o.salary.bg.period)}</dd></dl>
+      <h3>Заплащане</h3>
+      ${o.salary?.bg ? `<dl class="kv"><dt>България</dt><dd><b>≈ ${fmtNum(o.salary.bg.monthly)} €/мес.</b> бруто ${o.salary.bg.isEstimate ? `${kindBadge('model')} оценка за ${esc(o.salary.bg.period)}` : ''}</dd>
+        <dt>Официално</dt><dd>${fmtNum(o.salary.bg.official.monthly)} €/мес. (SES ${esc(o.salary.bg.official.period)}) ${kindBadge('fact')}</dd>
+        ${o.salary.eu ? `<dt>ЕС-27</dt><dd>≈ ${fmtNum(o.salary.eu.monthly)} €/мес.${o.salary.eu.isEstimate ? ` (оценка за ${esc(o.salary.eu.period)})` : ''}</dd>` : ''}
+        <dt>Група</dt><dd>${esc(o.salary.group)}</dd>${o.salary.sector ? `<dt>Сектор</dt><dd>${esc(o.salary.sector)}</dd>` : ''}</dl>
         <p class="small muted" style="margin-top:8px">${esc(o.salary.note)} Източник: ${esc(o.salary.source)}.</p>` : NA('Данните за заплатите още не са импортирани.')}
     </div>
   </div>
@@ -300,6 +301,13 @@ function evidenceList(ev) {
   return `<ul class="ev">${ev.map((e) => `<li>${kindBadge(e.kind)}<span class="${e.insufficient ? 'insufficient' : ''}">${esc(e.text)}<span class="src">${esc(e.source)} · ${esc(e.period)}</span></span></li>`).join('')}</ul>`;
 }
 
+const STEP_ICON = { course: '🎓', project: '🛠️', group: '👥' };
+
+function firstStepHtml(st) {
+  const body = st.url ? `<a href="${esc(st.url)}" target="_blank" rel="noopener">${esc(st.text)}</a>` : esc(st.text);
+  return `<div class="first-step"><span class="step-type">Първа стъпка · ${STEP_ICON[st.type] || ''} ${esc(st.label)}</span><span>${body}</span></div>`;
+}
+
 function renderResult(r) {
   const ai = r.ai;
   return `
@@ -320,15 +328,9 @@ function renderResult(r) {
     <div class="hz-label">${esc(h.label)}</div><p class="small muted">${esc(h.subtitle)}</p>
     ${ai?.ok && ai.texts?.[h.key] ? `<div class="ai-box">${kindBadge('ai')} ${esc(ai.texts[h.key])}<div class="small muted">Модел ${esc(ai.model)} · само върху данните по-долу</div></div>` : ''}
     ${h.items.map((i) => `<div class="skill-rec">
-      <div class="spread"><h4><a href="#/skill/${i.skillId}">${esc(i.name)}</a></h4>${i.score !== null ? `<span class="score" title="Future Skills Score (модел)">${i.score}</span>` : ''}</div>
-      <p class="small" style="margin:0 0 6px">${i.why.map(esc).join(' ')}</p>
-      ${confBadge(i.confidence)}
-      <p class="small" style="margin:8px 0 0">${kindBadge(i.evidence[0].kind)} ${esc(i.evidence[0].text)}</p>
-      <details><summary>Доказателства и източници (${i.evidence.length})</summary>${evidenceList(i.evidence)}</details>
-      <details><summary>Конкретни стъпки и ресурси</summary><ol class="steps">${i.steps.map((s) => `<li>${esc(s)}</li>`).join('')}</ol>
-        <div class="chips">${i.resources.map((res) => `<a class="chip" href="${esc(res.url)}" target="_blank" rel="noopener">${esc(res.title)}${res.free ? ' · безплатно' : ''}</a>`).join('')}</div></details>
-      ${i.nextSkills.length ? `<p class="small" style="margin-top:8px"><b>След това:</b> ${esc(i.nextSkills.join(', '))}</p>` : ''}
-      <details><summary>Ограничения</summary><ul class="small">${i.limitations.map((l) => `<li>${esc(l)}</li>`).join('')}</ul></details>
+      <h4><a href="#/skill/${i.skillId}">${esc(i.name)}</a></h4>
+      <p class="small${i.fact.insufficient ? ' muted' : ''}" style="margin:0 0 8px" title="${esc(`${i.fact.source} · ${i.fact.period}`)}">${kindBadge(i.fact.kind)} ${esc(i.fact.text)}</p>
+      ${firstStepHtml(i.firstStep)}
     </div>`).join('')}
   </section>`).join('')}</div>
 
@@ -492,11 +494,19 @@ $main.addEventListener('submit', async (e) => {
   const btn = form.querySelector('button');
   if (form.id === 'email-form') {
     const msg = document.getElementById('email-msg');
+    const input = /** @type {HTMLInputElement} */ (form.querySelector('input[name="email"]'));
+    const email = String(fd.get('email') || '').trim();
     btn.disabled = true; msg.textContent = 'Изпращане…';
     try {
-      await api('/api/email', { method: 'POST', body: JSON.stringify({ answers: quizState.answers, email: fd.get('email'), consent: fd.get('consent') === 'on', ai: Boolean(quizState.result?.ai?.ok) }) });
-      msg.textContent = '✅ Изпратено! Провери пощата си (и папка „Спам“).';
-    } catch (err) { msg.textContent = `❌ ${err.message}`; btn.disabled = false; }
+      await api('/api/email', { method: 'POST', body: JSON.stringify({ answers: quizState.answers, email, consent: fd.get('consent') === 'on', ai: Boolean(quizState.result?.ai?.ok) }) });
+      msg.innerHTML = `✅ Изпратено на <b>${esc(email)}</b>. Провери пощата си (и папка „Спам“). Сгрешен адрес? Поправи го в полето и натисни „Изпрати отново“.`;
+      btn.textContent = 'Изпрати отново';
+    } catch (err) { msg.textContent = `❌ ${err.message}`; }
+    // Полето и бутонът остават активни, за да може адресът да се поправи и изпрати отново
+    btn.disabled = false;
+    input.readOnly = false;
+    input.focus();
+    input.select();
   }
   if (form.id === 'test-email-form') {
     const tokenInput = /** @type {HTMLInputElement} */ (document.querySelector('#admin-form input[name="token"]'));

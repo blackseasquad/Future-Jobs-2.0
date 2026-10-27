@@ -2,11 +2,12 @@
 // Всеки елемент разграничава: fact (реални данни), forecast (публикувана прогноза),
 // model (изчисление на Future Jobs) и ai (AI генериран текст, ако е включен).
 import { SKILLS, SKILL_BY_ID } from '../catalog/skills.js';
-import { OCCUPATIONS, ISCO_MAJOR_LABELS } from '../catalog/occupations.js';
+import { OCCUPATIONS, ISCO_MAJOR_LABELS, NACE_LABELS } from '../catalog/occupations.js';
 import { INTERESTS, buildProfile } from '../catalog/quiz.js';
 import { latestSkillMetrics, occupationOutlook } from './scoring.js';
 import { WEF_2025, CEDEFOP_BG_2025 } from '../catalog/published.js';
 import { getMeta } from '../db.js';
+import { PROJECTS, GROUPS, STEP_LABELS } from '../catalog/first-steps.js';
 
 const TECH_WEF = ['ai_big_data', 'networks_cyber', 'tech_literacy'];
 
@@ -21,18 +22,77 @@ function cosine(a, b) {
 
 const pct = (x, d = 1) => `${(x * 100).toFixed(d).replace('.', ',')}%`;
 
-export function salaryFor(db, isco) {
-  const get = (geo) => db.prepare(`SELECT value, period FROM stat_observations WHERE source_id = 'eurostat' AND dataset = 'earn_ses22_28'
-    AND series_key = ? AND geo = ? AND value IS NOT NULL ORDER BY period DESC LIMIT 1`).get(`isco08=OC${isco}`, geo);
-  const bg = get('BG');
-  const eu = get('EU27_2020');
+/**
+ * Заплата от Eurostat Structure of Earnings Survey 2022 (последното издание; следващото е за 2026 г.).
+ * Най-точно: професионална група × сектор (earn_ses22_48, месечна). Ако за България няма стойност
+ * (напр. поверителни данни), се ползва цялата професионална група, а накрая годишната/12 (earn_ses22_28).
+ */
+/**
+ * Коефициент на ръст на заплатите в сектора: средно за последните 4 налични тримесечия
+ * спрямо средното за 2022 г. (Eurostat lc_lci_r2_q, компонент D11 „Заплати“).
+ */
+export function wageGrowth(db, geo, nace) {
+  for (const sadj of ['NSA', 'CA', 'SCA']) {
+    const rows = db.prepare(`SELECT period, value FROM stat_observations WHERE source_id = 'eurostat' AND dataset = 'lc_lci_r2_q'
+      AND series_key = ? AND geo = ? AND value IS NOT NULL ORDER BY period`).all(`nace_r2=${nace}|s_adj=${sadj}`, geo);
+    const base = rows.filter((r) => String(r.period).startsWith('2022-Q'));
+    const last4 = rows.slice(-4);
+    if (base.length !== 4 || last4.length !== 4 || String(last4[0].period) <= '2022-Q4') continue;
+    const avg = (a) => a.reduce((x, r) => x + Number(r.value), 0) / a.length;
+    return { factor: avg(last4) / avg(base), from: String(last4[0].period), to: String(last4[3].period) };
+  }
+  return null;
+}
+
+/**
+ * Заплата: официална стойност от Eurostat SES 2022 (последното издание – проучването е на 4 години;
+ * следващото, за 2026 г., се публикува ок. 2028 г.), актуализирана с индекса на заплатите в сектора
+ * до последните 4 тримесечия. SES: професионална група × сектор (earn_ses22_48); ако за България
+ * няма стойност – цялата група, накрая годишната/12 (earn_ses22_28).
+ */
+export function salaryFor(db, occ) {
+  const isco = occ.isco;
+  const monthly = (geo, nace) => {
+    for (const size of ['TOTAL', 'GE10']) {
+      const r = db.prepare(`SELECT value, period FROM stat_observations WHERE source_id = 'eurostat' AND dataset = 'earn_ses22_48'
+        AND series_key = ? AND geo = ? AND value IS NOT NULL ORDER BY period DESC LIMIT 1`).get(`isco08=OC${isco}|nace_r2=${nace}|sizeclas=${size}`, geo);
+      if (r) return { monthly: Math.round(Number(r.value)), period: String(r.period), approx: false };
+    }
+    return null;
+  };
+  const annualGroup = (geo) => {
+    const r = db.prepare(`SELECT value, period FROM stat_observations WHERE source_id = 'eurostat' AND dataset = 'earn_ses22_28'
+      AND series_key = ? AND geo = ? AND value IS NOT NULL ORDER BY period DESC LIMIT 1`).get(`isco08=OC${isco}`, geo);
+    return r ? { monthly: Math.round(Number(r.value) / 12), period: String(r.period), approx: true } : null;
+  };
+  const pick = (geo) => {
+    let official = null;
+    let level = 'group';
+    if (occ.nace) { official = monthly(geo, occ.nace); if (official) level = 'sector'; }
+    if (!official) official = monthly(geo, 'B-S') || annualGroup(geo);
+    if (!official) return null;
+    const g = wageGrowth(db, geo, level === 'sector' ? occ.nace : 'B-S');
+    return {
+      level, approx: official.approx,
+      official: { monthly: official.monthly, period: official.period },
+      estimate: g ? { monthly: Math.round(official.monthly * g.factor), period: `${g.from} – ${g.to}`, growthPct: Math.round((g.factor - 1) * 1000) / 10 } : null,
+      // стойността за показване: актуализираната оценка, ако има индекс; иначе официалната
+      monthly: g ? Math.round(official.monthly * g.factor) : official.monthly,
+      period: g ? `${g.from} – ${g.to}` : official.period,
+      isEstimate: Boolean(g),
+    };
+  };
+  const bg = pick('BG');
+  const eu = pick('EU27_2020');
   if (!bg && !eu) return null;
+  const sector = bg?.level === 'sector' ? NACE_LABELS[occ.nace] || occ.nace : null;
+  const who = sector ? `„${ISCO_MAJOR_LABELS[isco]}“ в сектор „${sector}“` : `цялата група „${ISCO_MAJOR_LABELS[isco]}“`;
   return {
-    group: ISCO_MAJOR_LABELS[isco],
-    bg: bg ? { annual: Number(bg.value), monthlyApprox: Math.round(Number(bg.value) / 12), period: String(bg.period) } : null,
-    eu: eu ? { annual: Number(eu.value), monthlyApprox: Math.round(Number(eu.value) / 12), period: String(eu.period) } : null,
-    source: 'Eurostat, Structure of Earnings Survey (earn_ses22_28)',
-    note: 'Средна брутна годишна заплата за цялата професионална група (не за конкретната професия). Официална прогноза за заплатите няма – това е последната публикувана стойност.',
+    group: ISCO_MAJOR_LABELS[isco], sector, bg, eu,
+    source: `Eurostat SES 2022 (${bg?.approx ? 'earn_ses22_28' : 'earn_ses22_48'})${bg?.isEstimate ? ' × индекс на заплатите (lc_lci_r2_q, D11)' : ''}`,
+    note: bg?.isEstimate
+      ? `Оценка: официалната средна брутна заплата на ${who} от 2022 г. (${bg.official.monthly} €), увеличена с ръста на заплатите в сектора (+${String(bg.estimate.growthPct).replace('.', ',')}%) до ${bg.estimate.period}. Не е заплата за точната професия и не е прогноза.`
+      : `Официална средна брутна месечна заплата на ${who} от проучването за 2022 г. (по-нов индекс на заплатите още не е импортиран). Не е прогноза.`,
   };
 }
 
@@ -57,27 +117,24 @@ function changeEvidence(m) {
   return out;
 }
 
-function stepsFor(skill, horizon, settings) {
-  const res = skill.resources.slice(0, 2);
-  const steps = [];
-  if (horizon === 'short') {
-    if (res[0]) steps.push(`Започни „${res[0].title}“ (${res[0].provider}${res[0].free ? ', безплатно' : ''}) – 3–4 часа седмично.`);
-    if (['tech', 'data'].includes(skill.category)) steps.push('Направи малък собствен проект и го публикувай в GitHub като начало на портфолио.');
-    else if (skill.category === 'language') steps.push('Цели сертификат (напр. ниво B2) до края на следващата учебна година.');
-    else if (skill.category === 'human') steps.push('Практикувай в училищен проект, ученически съвет, клуб или доброволчество – и си води бележки какво научаваш.');
-    else steps.push('Намери кратък практически курс или доброволческа инициатива в тази област.');
-  } else if (horizon === 'mid') {
-    steps.push(settings.study === 'university'
-      ? 'Избери специалност/избираеми дисциплини, които включват това умение, и търси летни стажове от 2. курс.'
-      : 'Запиши се в професионален курс или академия и търси стаж/първа работа, където умението се използва ежедневно.');
-    if (res[1] || res[0]) steps.push(`Задълбочи с „${(res[1] || res[0]).title}“ и вземи сертификат, ако е наличен.`);
-    steps.push('Участвай в състезания, хакатони или проекти с реални потребители.');
-  } else {
-    steps.push('Изгради навик за учене: преглеждай по веднъж на тримесечие кои умения растат (раздел „Умения“ в Future Jobs).');
-    steps.push('Комбинирай умението с поне една техническа и една човешка компетентност – това прави профила устойчив на автоматизация.');
-    if (res[0]) steps.push(`Ресурс за начало: „${res[0].title}“.`);
-  }
-  return steps;
+/** Конкретна първа стъпка + следваща стъпка: безплатен курс, малък проект или учебна група. */
+export function planFor(skill, horizon) {
+  const free = skill.resources.find((r) => r.free);
+  const course = free ? { type: 'course', label: STEP_LABELS.course, text: `„${free.title}“ (${free.provider})`, url: free.url } : null;
+  const project = { type: 'project', label: STEP_LABELS.project, text: PROJECTS[skill.id] || 'Направи малък проект, в който използваш умението, и го покажи на някого.' };
+  const group = { type: 'group', label: STEP_LABELS.group, text: GROUPS[skill.category] || GROUPS.human };
+  if (horizon === 'short') return { firstStep: course || project, nextStep: course ? project : group };
+  if (horizon === 'mid') return { firstStep: project, nextStep: course || group };
+  return { firstStep: group, nextStep: project };
+}
+
+/** Един кратък факт за картата: търсене в обявите, иначе прогноза на WEF, иначе ESCO. */
+function briefFact(evidence, horizon) {
+  const usable = evidence.filter((e) => !e.insufficient && e.kind !== 'model');
+  const demand = usable.find((e) => e.kind === 'fact' && /обявите/.test(e.text) && !/Промяна/.test(e.text));
+  const forecast = usable.find((e) => e.kind === 'forecast');
+  const order = horizon === 'short' ? [demand, forecast] : [forecast, demand];
+  return order.find(Boolean) || usable[0] || { kind: 'fact', insufficient: true, text: 'Още няма достатъчно данни за това умение.', source: '—', period: '—' };
 }
 
 /**
@@ -132,12 +189,13 @@ export function recommend(db, answers) {
     return out;
   };
   const horizons = [
-    { key: 'short', label: '6–12 месеца', subtitle: 'Започни сега: умения с текущо търсене и лесен старт', items: pick('short', 3) },
-    { key: 'mid', label: '2–5 години', subtitle: 'Растящи умения, които ще те отличат при първата работа', items: pick('mid', 3) },
-    { key: 'long', label: '5–10 години', subtitle: 'Устойчиви умения според дългосрочните прогнози', items: pick('long', 3) },
+    { key: 'short', label: 'Сега', subtitle: 'следващите 6–12 месеца', items: pick('short', 2) },
+    { key: 'mid', label: 'След 2–5 години', subtitle: 'растящи умения', items: pick('mid', 2) },
+    { key: 'long', label: 'След 5–10 години', subtitle: 'устойчиви умения', items: pick('long', 2) },
   ];
 
   const toItem = (c, horizon) => {
+    const plan = planFor(c.skill, horizon);
     const m = c.m;
     const lt = m?.details?.longTerm;
     const wef = c.skill.wef ? WEF_2025.growingSkills.find((g) => g.key === c.skill.wef) : null;
@@ -165,7 +223,10 @@ export function recommend(db, answers) {
       skillId: c.id, name: c.skill.name, category: c.skill.category, description: c.skill.description,
       why, occupations: [...new Set(c.rel.occ)], evidence,
       score: m?.score ?? null, confidence: m?.confidence ?? 'insufficient',
-      nextSkills: next, steps: stepsFor(c.skill, horizon, profile.settings), resources: c.skill.resources, limitations,
+      nextSkills: next, resources: c.skill.resources, limitations,
+      fact: briefFact(evidence, horizon),
+      firstStep: plan.firstStep, nextStep: plan.nextStep,
+      steps: [plan.firstStep, plan.nextStep].map((st) => `${st.label}: ${st.text}`),
     };
   };
 
@@ -176,10 +237,19 @@ export function recommend(db, answers) {
     occupations: occs.map(({ o, sim, outlook }) => ({
       id: o.id, title: o.title, description: o.description, match: Math.round(sim * 100),
       outlook: { index: outlook.index, signals: outlook.signals },
-      salary: salaryFor(db, o.isco),
+      salary: salaryFor(db, o),
       skills: { core: o.coreSkills.map((s) => SKILL_BY_ID.get(s)?.name), complementary: o.complementarySkills.map((s) => SKILL_BY_ID.get(s)?.name) },
     })),
-    horizons: horizons.map((h) => ({ key: h.key, label: h.label, subtitle: h.subtitle, items: h.items.map((c) => toItem(c, h.key)) })),
+    horizons: horizons.map((h) => {
+      const items = h.items.map((c) => toItem(c, h.key));
+      // Две умения в един хоризонт не трябва да имат еднаква първа стъпка (напр. същата учебна група)
+      if (items.length === 2 && items[0].firstStep.text === items[1].firstStep.text) {
+        const b = items[1];
+        [b.firstStep, b.nextStep] = [b.nextStep, b.firstStep];
+        b.steps = [b.firstStep, b.nextStep].map((st) => `${st.label}: ${st.text}`);
+      }
+      return { key: h.key, label: h.label, subtitle: h.subtitle, items };
+    }),
     knownSkills: [...known].map((id) => SKILL_BY_ID.get(id)?.name),
     disclaimers: [
       'Future Skills Score и индексът на перспективата са собствен модел на Future Jobs – не са научно доказана прогноза.',

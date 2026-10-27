@@ -192,3 +192,7 @@ ol.steps { padding-left: 20px; margin: 6px 0; font-size: .92rem; }
 .bar { display: grid; grid-template-columns: 150px 1fr 44px; gap: 10px; align-items: center; font-size: .88rem; }
 @media (max-width: 520px) { .bar { grid-template-columns: 110px 1fr 36px; } }
 .loading { color: var(--muted); padding: 40px 0; text-align: center; }
+
+/* Първа стъпка в резултата от анкетата */
+.first-step { display: grid; gap: 2px; background: var(--teal-soft); border-radius: 8px; padding: 8px 10px; font-size: .9rem; line-height: 1.45; }
+.step-type { font-size: .72rem; font-weight: 800; text-transform: uppercase; letter-spacing: .03em; color: var(--teal); }

@@ -78,7 +78,17 @@ test('препоръки: 3 професии, 3 хоризонта, всяко �
   const rec = recommend(db, ANSWERS);
   assert.equal(rec.occupations.length, 3);
   assert.ok(['ai_ml_specialist', 'data_scientist', 'software_developer', 'cloud_engineer', 'cybersecurity_specialist'].includes(rec.occupations[0].id));
-  assert.deepEqual(rec.horizons.map((h) => h.label), ['6–12 месеца', '2–5 години', '5–10 години']);
+  assert.deepEqual(rec.horizons.map((h) => h.label), ['Сега', 'След 2–5 години', 'След 5–10 години']);
+  for (const h of rec.horizons) {
+    assert.equal(h.items.length, 2, 'по 2 умения на хоризонт');
+    for (const i of h.items) {
+      assert.ok(['course', 'project', 'group'].includes(i.firstStep.type));
+      assert.ok(i.firstStep.text.length > 10);
+      assert.ok(i.fact.text && i.fact.kind);
+      if (i.firstStep.type === 'course') assert.match(i.firstStep.url, /^https:\/\//);
+    }
+  }
+  assert.equal(rec.horizons[2].items[0].firstStep.type, 'group');
   const ids = rec.horizons.flatMap((h) => h.items.map((i) => i.skillId));
   assert.equal(new Set(ids).size, ids.length, 'без повторения между хоризонтите');
   for (const h of rec.horizons) {
@@ -91,7 +101,24 @@ test('препоръки: 3 професии, 3 хоризонта, всяко �
       assert.ok(i.limitations.length >= 1);
     }
   }
-  assert.ok(rec.occupations[0].salary.bg.annual > 0);
+  assert.ok(rec.occupations[0].salary.bg.monthly > 0);
+  // Заплатите се различават по сектор, не само по професионална група
+  const { salaryFor } = await import('../src/model/recommend.js');
+  const { OCCUPATION_BY_ID } = await import('../src/catalog/occupations.js');
+  const sal = (id) => salaryFor(db, OCCUPATION_BY_ID.get(id));
+  assert.equal(sal('software_developer').sector, 'Информация и комуникации');
+  assert.notEqual(sal('software_developer').bg.monthly, sal('nurse').bg.monthly);
+  assert.notEqual(sal('nurse').bg.monthly, sal('fintech_specialist').bg.monthly);
+  // Липсваща стойност за сектора => цялата група, без измисляне
+  assert.equal(sal('teacher').sector, null);
+  assert.equal(sal('teacher').bg.level, 'group');
+  assert.equal(sal('agritech_specialist').bg.level, 'group', 'сектор A не е в SES');
+  // Актуализация с индекса на заплатите до последните 4 тримесечия
+  const sd = sal('software_developer').bg;
+  assert.equal(sd.isEstimate, true);
+  assert.equal(sd.estimate.period, '2025-Q3 – 2026-Q2');
+  assert.ok(sd.monthly > sd.official.monthly);
+  assert.equal(sd.official.period, '2022');
 });
 
 test('препоръки: невалидни отговори се отхвърлят', () => {

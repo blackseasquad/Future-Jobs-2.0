@@ -25,6 +25,26 @@ export const DATASETS = [
     unit: (d) => (d.indic_em === 'JVR' ? '%' : 'брой'),
   },
   {
+    // Средна месечна брутна заплата по професионална група И сектор – позволява различни
+    // стойности за напр. специалисти в ИТ, здравеопазване и образование.
+    dataset: 'earn_ses22_48',
+    label: 'Средни месечни брутни заплати по професия и икономическа дейност (SES 2022), EUR',
+    params: { geo: GEOS, sex: 'T', indic_se: 'ERN', unit: 'EUR' },
+    keep: () => true,
+    seriesDims: ['isco08', 'nace_r2', 'sizeclas'],
+    unit: 'EUR/мес.',
+  },
+  {
+    // Индекс на разходите за труд – компонент „Заплати“ (D11), тримесечен, по сектори.
+    // Използва се за актуализиране на заплатите от SES 2022 до последните 4 тримесечия.
+    dataset: 'lc_lci_r2_q',
+    label: 'Индекс на заплатите (Labour cost index, D11), тримесечен, 2020=100',
+    params: { geo: GEOS, unit: 'I20', lcstruct: 'D11', sinceTimePeriod: '2021-Q1' },
+    keep: () => true,
+    seriesDims: ['nace_r2', 's_adj'],
+    unit: 'индекс 2020=100',
+  },
+  {
     dataset: 'earn_ses22_28',
     label: 'Средни годишни брутни заплати по професия (SES 2022), EUR',
     params: { geo: GEOS, sex: 'T', age: 'TOTAL', sizeclas: 'TOTAL', indic_se: 'ERN', unit: 'EUR' },

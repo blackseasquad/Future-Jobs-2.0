@@ -63,6 +63,20 @@ export function eurostatFixture(dataset, { bump = 0 } = {}) {
     return jsonStat({ freq: ['Q'], s_adj: ['NSA'], nace_r2: ['B-S'], sizeclas: ['TOTAL'], indic_em: ['JOBVAC', 'JVR'], geo: ['BG', 'EU27_2020'], time: q },
       (c) => (c.indic_em === 'JOBVAC' ? (c.geo === 'BG' ? 17460 : 3_000_000) : c.geo === 'BG' ? { value: 0.8, flag: 'p' } : 2.1));
   }
+  if (dataset === 'earn_ses22_48') {
+    // Синтетични стойности за тестовете (различни по група и сектор); BG сектор P/OC2 липсва (поверителни)
+    const sec = { 'B-S': 1, C: 0.95, D: 1.3, F: 0.9, H: 0.95, J: 1.9, K: 1.4, M: 1.2, P: 0.85, Q: 0.9 };
+    const grp = { TOTAL: 900, OC1: 2000, OC2: 1400, OC3: 1050, OC4: 700, OC5: 550, OC7: 750, OC8: 700, OC9: 520 };
+    return jsonStat({ freq: ['A'], sex: ['T'], indic_se: ['ERN'], isco08: Object.keys(grp), nace_r2: Object.keys(sec), sizeclas: ['TOTAL'], unit: ['EUR'], geo: ['BG', 'EU27_2020'], time: ['2022'] },
+      (c) => (c.geo === 'BG' && c.isco08 === 'OC2' && c.nace_r2 === 'P' ? null : Math.round(grp[c.isco08] * sec[c.nace_r2] * (c.geo === 'BG' ? 1 : 3))));
+  }
+  if (dataset === 'lc_lci_r2_q') {
+    // Синтетичен индекс: 2022 = 120, расте с 2,5% на тримесечие; ИТ (J) расте по-бързо
+    const q = ['2021', '2022', '2023', '2024', '2025', '2026'].flatMap((y) => [1, 2, 3, 4].map((n) => `${y}-Q${n}`)).filter((p) => p <= '2026-Q2');
+    const sec = ['B-S', 'C', 'D', 'F', 'H', 'J', 'K', 'M', 'P', 'Q'];
+    return jsonStat({ freq: ['Q'], unit: ['I20'], s_adj: ['NSA'], lcstruct: ['D11'], nace_r2: sec, geo: ['BG', 'EU27_2020'], time: q },
+      (c) => { const i = q.indexOf(c.time) - 4; const g = c.nace_r2 === 'J' ? 0.035 : 0.025; return Math.round(120 * (1 + g) ** i * 10) / 10; });
+  }
   if (dataset === 'earn_ses22_28') {
     // Реални стойности за BG (EUR/год., SES 2022)
     const bg = { TOTAL: 11602, OC1: 26007, OC2: 17969, OC3: 12913, OC4: 8597, OC5: 6465, OC6: 5601, OC7: 8968, OC8: 8259, OC9: 6261 };

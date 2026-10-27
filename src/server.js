@@ -176,7 +176,7 @@ export function createHandler({ db: initialDb, provider, config, refreshImpl = r
       wefFastest: o.wefFastest ? WEF_2025.fastestGrowingJobs.find((j) => j.key === o.wefFastest) : null,
       wefLargest: o.wefLargest ? WEF_2025.largestGrowthJobs.find((j) => j.key === o.wefLargest) : null,
       outlook: { index: outlook.index, signals: outlook.signals },
-      salary: salaryFor(db, o.isco),
+      salary: salaryFor(db, o),
       esco,
     };
   }
