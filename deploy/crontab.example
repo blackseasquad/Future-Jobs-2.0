@@ -1,0 +1,4 @@
+# Вариант A: системен cron (Linux сървър/VPS). Добави с `crontab -e`.
+# CRON_TZ гарантира 06:00 по София, включително при лятно/зимно време.
+CRON_TZ=Europe/Sofia
+0 6 * * * cd /opt/future-jobs && /usr/bin/npm run --silent refresh:scheduled >> /var/log/future-jobs-refresh.log 2>&1

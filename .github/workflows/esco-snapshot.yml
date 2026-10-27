@@ -1,0 +1,27 @@
+# Създава/обновява снимката на ESCO (src/catalog/esco-snapshot.js) и я записва в репото.
+# Нужна е, защото ESCO API може да отказва достъп от Vercel (HTTP 403).
+# Пусни ръчно: GitHub → Actions → „ESCO snapshot“ → Run workflow. Push-ът ще задейства нов deploy във Vercel.
+name: ESCO snapshot
+on:
+  workflow_dispatch: {}
+  schedule:
+    - cron: '0 2 1 * *'   # веднъж месечно
+permissions:
+  contents: write
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: node --disable-warning=ExperimentalWarning scripts/esco-snapshot.js
+      - name: Commit snapshot
+        run: |
+          if git diff --quiet -- src/catalog/esco-snapshot.js; then echo "Няма промени"; exit 0; fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898333+github-actions[bot]@users.noreply.github.com"
+          git add src/catalog/esco-snapshot.js
+          git commit -m "Обновена снимка на ESCO"
+          git push

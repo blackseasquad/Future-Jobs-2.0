@@ -1,0 +1,11 @@
+[Unit]
+Description=Future Jobs – всеки ден в 06:00 Europe/Sofia
+
+[Timer]
+OnCalendar=*-*-* 06:00:00 Europe/Sofia
+# Ако сървърът е бил изключен в 06:00, задачата се изпълнява при следващото стартиране
+Persistent=true
+RandomizedDelaySec=0
+
+[Install]
+WantedBy=timers.target

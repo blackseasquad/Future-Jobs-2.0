@@ -1,0 +1,14 @@
+# Вариант B: systemd timer. Копирай двата файла в /etc/systemd/system/ и изпълни:
+#   sudo systemctl daemon-reload && sudo systemctl enable --now future-jobs-refresh.timer
+[Unit]
+Description=Future Jobs – ежедневно обновяване на данните за пазара на труда
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/future-jobs
+EnvironmentFile=/opt/future-jobs/.env
+ExecStart=/usr/bin/node --disable-warning=ExperimentalWarning scripts/refresh.js --scheduled
+User=futurejobs
+TimeoutStartSec=1800
