@@ -1,6 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Future Jobs">
-  <rect width="64" height="64" rx="16" fill="#0f4c45"/>
-  <path d="M14 46 L28 32 L36 38 L50 20" fill="none" stroke="#f2b84b" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
-  <path d="M40 18 H52 V30" fill="none" stroke="#f2b84b" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
-  <circle cx="14" cy="46" r="4" fill="#e9f4ef"/>
-</svg>
