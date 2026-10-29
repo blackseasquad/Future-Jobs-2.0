@@ -1,4 +1,55 @@
 <!doctype html>
-<html lang="bg"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Посока — открий своя път</title><meta name="description" content="Открий професии и умения, подходящи за твоите интереси, с данни за пазара на труда."><link rel="icon" href="/logo.svg" type="image/svg+xml"><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap"><link rel="stylesheet" href="/styles.css"></head><body>
-<a class="skip" href="#main">Към съдържанието</a><header class="topbar"><div class="wrap topbar-inner"><a class="brand" href="#/" aria-label="Посока — начало"><span class="brandmark">⌁</span><span>по<b>сока</b><small>ТВОЯТА ПОСОКА НАПРЕД</small></span></a><nav class="nav" aria-label="Основна навигация"><a href="#/" data-route="home">Начало</a><a href="#/occupations" data-route="occupations">Професии</a><a href="#/skills" data-route="skills">Умения</a><a href="#/data" data-route="data">За данните</a></nav><a class="btn btn-primary header-cta" href="#/quiz" data-route="quiz">Започни анкетата ↗</a><button class="menu-toggle" type="button" aria-label="Отвори менюто" aria-expanded="false">☰</button></div></header>
-<main id="main" class="wrap" tabindex="-1"><noscript>Посока изисква JavaScript.</noscript></main><footer class="footer"><div class="wrap footer-inner"><div><a class="footer-brand" href="#/">по<b>сока</b></a><p>Открий уменията и професиите,<br>които те водят напред.</p></div><div><b>РАЗГЛЕДАЙ</b><a href="#/occupations">Професии</a><a href="#/skills">Умения</a><a href="#/quiz">Анкета</a></div><div><b>ЗА ПРОЕКТА</b><a href="#/data">Източници и методология</a><a id="freshness" class="fresh fresh-unknown" href="#/data" title="Статус на данните">Зареждане…</a><p>Ученически проект за EduHack.bg<br>BlackSea Squad · Варна</p></div></div></footer><script type="module" src="/app.js"></script></body></html>
+<html lang="bg">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Future Jobs – Открий своята посока</title>
+  <meta name="description" content="Future Jobs – какво да уча днес, за да имам работа утре. Реални данни от Eurostat, ESCO, Cedefop и WEF, обновявани всеки ден.">
+  <meta name="theme-color" content="#0b2554">
+  <link rel="icon" href="/favicon.png" type="image/png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Onest:wght@400;500;600;700;800&display=swap">
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <a class="skip" href="#main">Към съдържанието</a>
+  <header class="header">
+    <a class="brand" href="#/" aria-label="Future Jobs – начало">
+      <span class="brand-mark"><img src="/wave-sm.png" alt="" width="34" height="30"></span>
+      <span class="brand-text"><span class="brand-name">future<b>jobs</b></span><span class="brand-tag">ОТКРИЙ ПОСОКАТА СИ</span></span>
+    </a>
+    <nav class="nav" aria-label="Основна навигация">
+      <a href="#/" data-route="home">Начало</a>
+      <a href="#/occupations" data-route="occupations">Професии</a>
+      <a href="#/skills" data-route="skills">Умения</a>
+      <a href="#/data" data-route="data">Данни</a>
+    </nav>
+    <div id="header-cta"><a class="btn" href="#/quiz">Започни анкетата <span aria-hidden="true">↗</span></a></div>
+  </header>
+  <main id="main" tabindex="-1">
+    <noscript><div class="wrap">Future Jobs изисква JavaScript.</div></noscript>
+  </main>
+  <footer class="footer">
+    <div class="wrap footer-grid">
+      <div class="footer-col">
+        <span class="brand-name">future<b>jobs</b></span>
+        <span>Открий уменията и професиите,<br>които те водят напред.</span>
+      </div>
+      <div class="footer-col">
+        <h4>РАЗГЛЕДАЙ</h4>
+        <a href="#/occupations">Професии</a>
+        <a href="#/skills">Умения</a>
+        <a href="#/quiz">Анкета</a>
+      </div>
+      <div class="footer-col">
+        <h4>ЗА ПРОЕКТА</h4>
+        <a href="#/data">Източници и методология</a>
+        <a id="freshness" class="fresh unknown" href="#/data" role="status"><span class="dot"></span><span>Проверка на данните…</span></a>
+        <span>Ученически проект за <a href="https://www.eduhack.bg" rel="noopener">EduHack.bg</a><br>BlackSea Squad · Варна</span>
+      </div>
+    </div>
+  </footer>
+  <script type="module" src="/app.js"></script>
+</body>
+</html>

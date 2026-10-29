@@ -1,0 +1,25 @@
+# НЕ Е НУЖЕН при хостване във Vercel – там се използва Vercel Cron (vercel.json).
+# Вариант C: GitHub Actions извиква защитения endpoint на вече публикуваното приложение.
+# GitHub cron е в UTC, затова се стартира в 03:00 и 04:00 UTC, а сървърът изпълнява
+# импорта само ако в София е 06:xx (параметър window=sofia) – така работи и при лятно, и при зимно време.
+# Нужни secrets в репото: FUTURE_JOBS_URL (напр. https://futurejobs.example.com) и CRON_SECRET.
+name: Daily data refresh (06:00 Europe/Sofia)
+on:
+  schedule:
+    - cron: '0 3 * * *'
+    - cron: '0 4 * * *'
+  workflow_dispatch: {}
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call protected refresh endpoint
+        env:
+          URL: ${{ secrets.FUTURE_JOBS_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          WINDOW="window=sofia"
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then WINDOW=""; fi
+          curl --fail-with-body -sS -X POST --max-time 900 \
+            -H "Authorization: Bearer ${CRON_SECRET}" \
+            "${URL}/api/cron/refresh?wait=1&${WINDOW}"

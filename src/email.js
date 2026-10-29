@@ -17,11 +17,11 @@ export function buildResultEmail(rec, ai, publicUrl) {
     (o.salary?.bg ? `<br><small>Средна брутна заплата в България: ≈ ${o.salary.bg.monthly.toLocaleString('bg-BG')} EUR/мес. – „${esc(o.salary.group)}“${o.salary.sector ? ` в „${esc(o.salary.sector)}“` : ''} (${o.salary.bg.isEstimate ? `оценка за ${esc(o.salary.bg.period)}` : `Eurostat SES ${esc(o.salary.bg.period)}`})</small>` : '') +
     '</li>').join('');
   const hz = rec.horizons.map((h) => `
-    <h3 style="color:#0f5c4d;margin:24px 0 4px">${esc(h.label)}</h3><p style="margin:0 0 8px;color:#555">${esc(h.subtitle)}</p>
-    ${ai?.ok && ai.texts[h.key] ? `<p style="background:#f3efe6;padding:8px 12px;border-radius:6px"><small><b>AI текст</b> (${esc(ai.model)}), базиран само на данните по-долу:</small><br>${esc(ai.texts[h.key])}</p>` : ''}
+    <h3 style="color:#0b2554;margin:24px 0 4px">${esc(h.label)}</h3><p style="margin:0 0 8px;color:#555">${esc(h.subtitle)}</p>
+    ${ai?.ok && ai.texts[h.key] ? `<p style="background:#eef7fd;padding:8px 12px;border-radius:6px"><small><b>AI текст</b> (${esc(ai.model)}), базиран само на данните по-долу:</small><br>${esc(ai.texts[h.key])}</p>` : ''}
     ${h.items.map((i) => `
       <div style="border:1px solid #ddd;border-radius:8px;padding:12px;margin:8px 0">
-        <b style="font-size:16px">${esc(i.name)}</b>${i.score !== null ? ` <span style="color:#0f5c4d">· Future Skills Score ${i.score}/100</span>` : ''}
+        <b style="font-size:16px">${esc(i.name)}</b>${i.score !== null ? ` <span style="color:#0b2554">· Future Skills Score ${i.score}/100</span>` : ''}
         <p style="margin:6px 0">${i.why.map(esc).join(' ')}</p>
         <ul style="margin:4px 0;padding-left:18px">${i.evidence.map((e) => `<li><small><b>${KIND[e.kind]}:</b> ${esc(e.text)} <i>(${esc(e.source)}; ${esc(e.period)})</i></small></li>`).join('')}</ul>
         <p style="margin:6px 0"><b>Стъпки:</b></p><ol style="margin:0;padding-left:18px">${i.steps.map((s) => `<li>${esc(s)}</li>`).join('')}</ol>
@@ -29,7 +29,7 @@ export function buildResultEmail(rec, ai, publicUrl) {
         ${i.nextSkills.length ? `<p style="margin:6px 0"><b>След това:</b> ${i.nextSkills.map(esc).join(', ')}</p>` : ''}
       </div>`).join('')}`).join('');
   const html = `<!doctype html><html><body style="font-family:Arial,sans-serif;color:#1d1d1b;max-width:680px;margin:auto;padding:16px">
-    <h1 style="color:#0f5c4d;margin-bottom:0">Future Jobs</h1><p style="margin-top:4px">Твоят план за бъдещите умения</p>
+    <h1 style="color:#0b2554;margin-bottom:0">Future Jobs</h1><p style="margin-top:4px">Твоят план за бъдещите умения</p>
     <p>Интереси: <b>${esc(rec.profile.topInterests.join(', '))}</b>. Данни към: ${esc(rec.dataAsOf ? new Date(rec.dataAsOf).toLocaleString('bg-BG', { timeZone: 'Europe/Sofia' }) : 'няма импорт')}.</p>
     <h2>Професии, подходящи за теб</h2><ul>${occ}</ul>
     <h2>Умения по хоризонти</h2>${hz}

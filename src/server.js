@@ -12,7 +12,7 @@ import { OCCUPATIONS, OCCUPATION_BY_ID, ISCO_MAJOR_LABELS } from './catalog/occu
 import { WEF_2025, CEDEFOP_BG_2025 } from './catalog/published.js';
 import { QUIZ, INTERESTS } from './catalog/quiz.js';
 import { latestSkillMetrics, skillHistory, occupationOutlook, employmentTrend, WEIGHTS, MODEL_VERSION, MIN_POSTINGS } from './model/scoring.js';
-import { recommend, salaryFor } from './model/recommend.js';
+import { recommend, salaryFor, planFor } from './model/recommend.js';
 import { explainWithAi } from './ai.js';
 import { buildResultEmail, sendSmtp, isValidEmail, hashEmail, explainSmtpError } from './email.js';
 import { runRefresh, AlreadyRunningError } from './pipeline.js';
@@ -205,7 +205,7 @@ export function createHandler({ db: initialDb, provider, config, refreshImpl = r
       if (!s) throw new HttpError(404, 'Няма такова умение');
       const m = latestSkillMetrics(db).get(s.id);
       return send(res, 200, {
-        ...skillSummary(s, m), resources: s.resources, synonyms: s.patterns,
+        ...skillSummary(s, m), resources: s.resources, synonyms: s.patterns, firstStep: planFor(s, 'mid').firstStep,
         details: m?.details ? { ...m.details, cooccurrence: (m.details.cooccurrence || []).map((c) => ({ ...c, name: SKILL_BY_ID.get(c.skill)?.name || c.skill })) } : null,
         history: skillHistory(db, s.id), esco: escoFor('skill', s.id),
         occupations: OCCUPATIONS.filter((o) => o.coreSkills.includes(s.id) || o.complementarySkills.includes(s.id)).map((o) => ({ id: o.id, title: o.title, core: o.coreSkills.includes(s.id) })),
