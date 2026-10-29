@@ -15,7 +15,8 @@
     "test": "node --disable-warning=ExperimentalWarning --test \"test/**/*.test.js\"",
     "typecheck": "tsc -p tsconfig.json",
     "check": "npm run typecheck && npm test",
-    "esco:snapshot": "node --disable-warning=ExperimentalWarning scripts/esco-snapshot.js"
+    "esco:snapshot": "node --disable-warning=ExperimentalWarning scripts/esco-snapshot.js",
+    "dev": "node --disable-warning=ExperimentalWarning scripts/dev.js"
   },
   "devDependencies": {
     "@types/node": "^22.13.0",

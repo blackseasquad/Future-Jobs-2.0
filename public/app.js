@@ -87,57 +87,16 @@ async function exampleResults() {
 }
 
 async function pageHome() {
-  const [market, status, examples] = await Promise.all([cached('market', () => api('/api/market')), loadFreshness(), exampleResults()]);
-  const h = Object.fromEntries(market.wef.headline.map((x) => [x.key, x]));
-  const shown = examples.filter(Boolean);
-  return `
-  <section class="hero">
-    <div>
-      <p class="badge b-ok">EduHack.bg · за ученици и млади хора</p>
-      <h1>Какво да уча <span>днес</span>, за да имам работа <span>утре</span>?</h1>
-      <p class="lead">Future Jobs събира всеки ден реални данни за пазара на труда и дългосрочни прогнози и ти показва кои умения да развиваш – сега, след 2–5 и след 5–10 години.</p>
-      <div class="row"><a class="btn btn-amber" href="#/quiz">Направи анкетата (2 мин.)</a></div>
-      <p class="small muted" style="margin-top:14px">${status?.lastSuccessfulImport ? `Последно обновяване: <b>${fmtDate(status.lastSuccessfulImport)}</b> · следващо: ${fmtDate(status.nextScheduledRun)}` : 'Данните още не са импортирани.'}</p>
-    </div>
-    <aside class="hero-panel" aria-label="Ключови прогнози">
-      <h3>До 2030 г. според WEF</h3>
-      <ul>
-        <li><div class="big">${h.jobs_created_m.value} млн.</div>нови работни места глобално, ${h.jobs_displaced_m.value} млн. изместени</li>
-        <li><div class="big">${h.skills_change_pct.value}%</div>от ключовите умения ще се променят</li>
-      </ul>
-      <p class="src">Прогноза · ${esc(market.wef.title)} · ${esc(market.wef.method)}</p>
-    </aside>
-  </section>
-${shown.length ? `
-  <section class="section">
-    <div class="section-head"><h2>Примерни резултати</h2>${kindBadge('model')}</div>
-    <div class="grid g3">${shown.map((e) => `<a class="card occ-card" href="#/quiz" style="text-decoration:none">
-      <span class="badge b-off" style="align-self:flex-start">Пример</span>
-      <p class="small muted" style="margin:0">Профил: <b>${esc(e.label)}</b></p>
-      <h3>${esc(e.occupation.title)}</h3>
-      <div class="spread small"><span>съвпадение ${e.occupation.match}%</span><span>перспектива ${e.occupation.outlook.index ?? '—'}/100</span></div>
-      <p class="small" style="margin:0"><b>Първи умения (6–12 месеца):</b></p>
-      <div class="chips">${e.skills.map((n) => `<span class="chip">${esc(n)}</span>`).join('')}</div>
-    </a>`).join('')}</div>
-    <p class="small muted" style="margin-top:10px">Изчислени от модела на Future Jobs за примерни отговори в анкетата, със същите данни. <a href="#/quiz">Виж своя резултат →</a></p>
-  </section>` : ''}`;
+  return `<section class="hero"><div class="hero-copy"><p class="eyebrow">ТВОЕТО БЪДЕЩЕ ЗАПОЧВА ТУК</p><h1>Открий своята<br><span>посока.</span></h1><p class="lead">Какво да учиш днес, за да имаш работа утре? Разгледай възможности, открий силните си страни и направи първата стъпка.</p><div class="row hero-actions"><a class="btn btn-primary" href="#/quiz">Открий своя път ↗</a><a class="text-link" href="#/occupations">Разгледай професиите →</a></div><p class="hero-meta">✦ За ученици и млади хора &nbsp;&nbsp; ✦ Данни и прогнози</p></div><div class="hero-art"><div class="orbit"></div><img src="/wave.png" alt="Синя вълна — елемент от визията на BlackSea Squad"><div class="floating one">РАЗГЛЕДАЙ<strong>Професии с перспектива</strong></div><div class="floating two">ЗАПОЧНИ ОТ СЕБЕ СИ<strong>Твоите интереси → твоят път</strong></div></div></section><section class="home-section"><p class="eyebrow">ОТКЪДЕ ДА ЗАПОЧНА?</p><h2>Бъдещето има много посоки.</h2><p class="muted">Избери тази, която е интересна за теб.</p><div class="grid g3 home-cards"><a class="card home-card" href="#/quiz"><span class="home-icon">✳</span><h3>Опознай себе си <span>↗</span></h3><p>Отговори на няколко въпроса за интересите и целите си.</p></a><a class="card home-card" href="#/occupations"><span class="home-icon">↗</span><h3>Открий професии <span>↗</span></h3><p>Разгледай различни възможности и какво стои зад тях.</p></a><a class="card home-card" href="#/skills"><span class="home-icon">✧</span><h3>Развий умения <span>↗</span></h3><p>Виж кои умения можеш да започнеш да развиваш още днес.</p></a></div></section><section class="home-band"><div><p class="eyebrow">МАЛКА СТЪПКА. ГОЛЯМА ПОСОКА.</p><h2>Готов ли си да откриеш своя път?</h2><p>Започни с интересите си и разгледай възможностите пред теб.</p></div><a class="btn btn-primary" href="#/quiz">Започни анкетата ↗</a></section>`;
 }
 
 const INTEREST_FILTERS = ['Технологии', 'Данни и анализ', 'Творчество и дизайн', 'Работа с хора', 'Грижа и помощ', 'Природа и устойчивост', 'Бизнес и организация', 'Практическа/техническа работа'];
 let occFilter = null;
-
+let occQuery = '';
 async function pageOccupations() {
   const { occupations } = await cached('occ', () => api('/api/occupations'));
-  const list = occFilter ? occupations.filter((o) => o.interests.includes(occFilter)) : occupations;
-  return `
-  <div class="section-head"><div><h1>Каталог на бъдещите професии</h1>
-    <p class="muted">${occupations.length} професии с перспектива, свързани умения и официални данни за заплащането.</p></div>
-    <div class="legend">${kindBadge('fact')} ${kindBadge('forecast')} ${kindBadge('model')}</div></div>
-  <div class="filters" role="group" aria-label="Филтър по интереси">
-    <button data-filter="" aria-pressed="${!occFilter}">Всички</button>
-    ${INTEREST_FILTERS.map((f) => `<button data-filter="${esc(f)}" aria-pressed="${occFilter === f}">${esc(f)}</button>`).join('')}
-  </div>
-  <div class="grid g3">${list.map(occCard).join('')}</div>`;
+  const list = occupations.filter(o => (!occFilter || o.interests.includes(occFilter)) && `${o.title} ${o.description}`.toLocaleLowerCase('bg').includes(occQuery.toLocaleLowerCase('bg')));
+  return `<div class="page-title"><p class="eyebrow">РАЗГЛЕДАЙ ВЪЗМОЖНОСТИТЕ</p><h1>Професии за твоето бъдеще.</h1><p class="muted">Разгледай каталога и открий какво ти е интересно.</p></div><input class="search" type="search" data-search="occupation" aria-label="Търсене на професия" placeholder="⌕  Потърси професия" value="${esc(occQuery)}"><details class="disclosure filter-box" ${occFilter ? 'open' : ''}><summary>Филтри по интереси ${occFilter ? `<span class="small">${esc(occFilter)}</span>` : ''}</summary><div class="disclosure-body"><div class="filters" role="group" aria-label="Филтър по интереси"><button data-filter="" aria-pressed="${!occFilter}">Всички</button>${INTEREST_FILTERS.map(f=>`<button data-filter="${esc(f)}" aria-pressed="${occFilter===f}">${esc(f)}</button>`).join('')}</div></div></details><p class="small muted">${list.length} професии</p><div class="grid g3">${list.map(occCard).join('')}</div>${list.length?'':'<p class="muted">Няма намерени професии. Опитай друга дума или филтър.</p>'}`;
 }
 
 function salaryLine(s) {
@@ -146,14 +105,7 @@ function salaryLine(s) {
 }
 
 function occCard(o) {
-  return `<a class="card occ-card" href="#/occupation/${o.id}" style="text-decoration:none">
-    <div class="spread"><span class="muted small">${esc(o.iscoLabel)}</span>${o.wefFastest ? `<span class="badge b-forecast">WEF +${o.wefFastest.pct}%</span>` : o.wefLargest ? '<span class="badge b-forecast">WEF ръст</span>' : ''}</div>
-    <h3>${esc(o.title)}</h3>
-    <p class="small muted" style="margin:0">${esc(o.description)}</p>
-    <div><div class="spread small"><span>Перспектива ${kindBadge('model')}</span><b>${o.outlook.index ?? '—'}/100</b></div><div class="meter"><i style="width:${o.outlook.index ?? 0}%"></i></div></div>
-    <div class="small">${salaryLine(o.salary)}</div>
-    <div class="chips">${o.coreSkills.map((s) => `<span class="chip">${esc(s.name)}</span>`).join('')}</div>
-  </a>`;
+  return `<a class="card occ-card" href="#/occupation/${esc(o.id)}"><span class="job-label">ПРОФЕСИЯ · ${esc(o.interests?.[0] || o.iscoLabel)}</span><h3>${esc(o.title)}</h3><p class="small muted">${esc(o.description)}</p><span class="more">Разгледай професията ↗</span></a>`;
 }
 
 function signalsList(signals) {
@@ -162,115 +114,39 @@ function signalsList(signals) {
 
 async function pageOccupation(id) {
   const o = await api(`/api/occupations/${encodeURIComponent(id)}`);
-  const emp = o.employment;
-  const ess = o.escoSkills.filter((s) => s.relation === 'essential');
-  return `
-  <a class="detail-back" href="#/occupations">← Към каталога</a>
-  <div class="spread"><h1>${esc(o.title)}</h1>${o.wefFastest ? `<span class="badge b-forecast">WEF: +${o.wefFastest.pct}% до 2030</span>` : ''}</div>
-  <p class="lead muted">${esc(o.description)}</p>
-  <div class="grid g2">
-    <div class="card">
-      <div class="spread"><h3>Дългосрочна перспектива</h3><span class="score">${o.outlook.index ?? '—'}</span></div>
-      <p class="small muted">Индекс 0–100 = дял на положителните сигнали от наличните (модел на Future Jobs, не прогноза за конкретен брой работни места).</p>
-      ${signalsList(o.outlook.signals)}
-    </div>
-    <div class="card">
-      <h3>Заплащане</h3>
-      ${o.salary?.bg ? `<dl class="kv"><dt>България</dt><dd><b>≈ ${fmtNum(o.salary.bg.monthly)} €/мес.</b> бруто ${o.salary.bg.isEstimate ? `${kindBadge('model')} оценка за ${esc(o.salary.bg.period)}` : ''}</dd>
-        <dt>Официално</dt><dd>${fmtNum(o.salary.bg.official.monthly)} €/мес. (SES ${esc(o.salary.bg.official.period)}) ${kindBadge('fact')}</dd>
-        ${o.salary.eu ? `<dt>ЕС-27</dt><dd>≈ ${fmtNum(o.salary.eu.monthly)} €/мес.${o.salary.eu.isEstimate ? ` (оценка за ${esc(o.salary.eu.period)})` : ''}</dd>` : ''}
-        <dt>Група</dt><dd>${esc(o.salary.group)}</dd>${o.salary.sector ? `<dt>Сектор</dt><dd>${esc(o.salary.sector)}</dd>` : ''}</dl>
-        <p class="small muted" style="margin-top:8px">${esc(o.salary.note)} Източник: ${esc(o.salary.source)}.</p>` : NA('Данните за заплатите още не са импортирани.')}
-    </div>
-  </div>
-  <div class="card" style="margin-top:16px">
-    <div class="spread"><h3>Заети в професионалната група „${esc(o.iscoLabel)}“ (хил. души)</h3>${kindBadge('fact')}</div>
-    ${emp.BG ? lineChart([emp.BG.series], { names: ['България'] }) : NA()}
-    <p class="small muted">${esc(emp.source)}${emp.BG?.breaks ? ' · Внимание: прекъсване на редицата (методологична промяна).' : ''}</p>
-  </div>
-  <div class="grid g2" style="margin-top:16px">
-    <div class="card"><h3>Умения в Future Jobs</h3>
-      <p class="small"><b>Основни:</b></p><div class="chips">${o.coreSkills.map((s) => `<a class="chip" href="#/skill/${s.id}">${esc(s.name)}</a>`).join('')}</div>
-      <p class="small" style="margin-top:10px"><b>Допълващи:</b></p><div class="chips">${o.complementarySkills.map((s) => `<a class="chip alt" href="#/skill/${s.id}">${esc(s.name)}</a>`).join('')}</div>
-    </div>
-    <div class="card"><div class="spread"><h3>Съществени умения по ESCO</h3>${kindBadge('fact')}</div>
-      ${o.esco ? `<p class="small muted">ESCO: <a href="${esc(o.esco.uri)}" rel="noopener">${esc(o.esco.label_bg)}</a> (код ${esc(o.esco.code)})</p>
-      <div class="chips">${ess.slice(0, 24).map((s) => `<span class="chip alt">${esc(s.to_label)}</span>`).join('') || NA()}</div>` : NA('ESCO данните още не са импортирани.')}
-    </div>
-  </div>`;
+  const emp = o.employment; const ess = o.escoSkills.filter(s=>s.relation==='essential');
+  return `<div class="detail-page"><a class="detail-back" href="#/occupations">← Всички професии</a><p class="eyebrow">ПРОФЕСИЯ</p><h1>${esc(o.title)}</h1><p class="lead muted">${esc(o.description)}</p><div class="disclosure-stack">
+    <details class="disclosure"><summary>Основни умения</summary><div class="disclosure-body"><div class="chips">${o.coreSkills.map(s=>`<a class="chip" href="#/skill/${s.id}">${esc(s.name)} ↗</a>`).join('')}</div></div></details>
+    <details class="disclosure"><summary>Допълващи умения</summary><div class="disclosure-body"><div class="chips">${o.complementarySkills.map(s=>`<a class="chip" href="#/skill/${s.id}">${esc(s.name)} ↗</a>`).join('')}</div></div></details>
+    <details class="disclosure"><summary>Перспектива</summary><div class="disclosure-body"><p><b>Индекс на перспектива: ${o.outlook.index ?? '—'}/100</b> ${kindBadge('model')}</p><p class="small muted">Индексът показва дела на положителните сигнали от наличните. Не е прогноза за конкретен брой работни места.</p>${signalsList(o.outlook.signals)}</div></details>
+    <details class="disclosure"><summary>Заплащане</summary><div class="disclosure-body">${o.salary?.bg?`<dl class="kv"><dt>България</dt><dd><b>≈ ${fmtNum(o.salary.bg.monthly)} €/мес.</b> бруто ${o.salary.bg.isEstimate ? `${kindBadge('model')} оценка за ${esc(o.salary.bg.period)}` : ''}</dd><dt>Официално</dt><dd>${fmtNum(o.salary.bg.official.monthly)} €/мес. (SES ${esc(o.salary.bg.official.period)}) ${kindBadge('fact')}</dd>${o.salary.eu?`<dt>ЕС-27</dt><dd>≈ ${fmtNum(o.salary.eu.monthly)} €/мес. ${o.salary.eu.isEstimate?`(оценка за ${esc(o.salary.eu.period)})`:''}</dd>`:''}<dt>Група</dt><dd>${esc(o.salary.group)}</dd>${o.salary.sector?`<dt>Сектор</dt><dd>${esc(o.salary.sector)}</dd>`:''}</dl><p class="small muted">${esc(o.salary.note)} Източник: ${esc(o.salary.source)}.</p>`:NA('Данните за заплатите още не са импортирани.')}</div></details>
+    <details class="disclosure"><summary>Заетост в професионалната група</summary><div class="disclosure-body"><p>Заети в група „${esc(o.iscoLabel)}“ в България (хил. души) ${kindBadge('fact')}</p>${emp.BG?lineChart([emp.BG.series],{names:['България']}):NA()}<p class="small muted">${esc(emp.source)}${emp.BG?.breaks?' · Има прекъсване на редицата (методологична промяна).':''}</p></div></details>
+    <details class="disclosure"><summary>Данни от ESCO</summary><div class="disclosure-body">${o.esco?`<p class="small muted">Автоматично съпоставяне — проверете дали съответства на професията: <a href="${esc(o.esco.uri)}" target="_blank" rel="noopener">${esc(o.esco.label_bg)}</a> (код ${esc(o.esco.code)}).</p><div class="chips">${ess.slice(0,24).map(s=>`<span class="chip alt">${esc(s.to_label)}</span>`).join('')||NA()}</div>`:NA('ESCO данните още не са импортирани.')}</div></details>
+  </div></div>`;
 }
 
 let skillSort = 'score';
+let skillCompareOpen = false;
+let skillQuery = '';
 async function pageSkills() {
   const d = await cached('skills', () => api('/api/skills'));
-  const key = { score: (s) => s.score ?? -1, demand: (s) => s.demandShare ?? -1, change: (s) => s.change90 ?? s.change30 ?? -9, long: (s) => s.longTerm ?? -1, name: (s) => s.name };
-  const list = [...d.skills].sort((a, b) => (skillSort === 'name' ? a.name.localeCompare(b.name, 'bg') : key[skillSort](b) - key[skillSort](a)));
-  const th = (k, t) => `<th><button data-sort="${k}" aria-label="Сортирай по ${t}">${t}${skillSort === k ? ' ↓' : ''}</button></th>`;
-  const change = (s) => {
-    const v = s.change90 ?? s.change30;
-    if (v === null || v === undefined) return NA('нужна е история');
-    return `<span class="${v >= 0 ? 'up' : 'down'}">${v >= 0 ? '+' : ''}${(v * 100).toFixed(2).replace('.', ',')} п.п.</span> <span class="muted small">${s.change90 !== null ? '90 д.' : '30 д.'}</span>`;
-  };
-  return `
-  <div class="section-head"><div><h1>Умения на бъдещето</h1>
-    <p class="muted">Показатели за ${d.skills.length} умения, изчислени от реалните данни при всяко ежедневно обновяване.</p></div>
-    <a class="btn btn-ghost" href="/METHODOLOGY.md">Методология</a></div>
-  <div class="notice" style="margin-bottom:16px"><b>Future Skills Score</b> ${kindBadge('model')} е собствена относителна оценка (0–100) спрямо останалите проследявани умения: търсене ${d.weights.demand * 100}%, динамика ${d.weights.momentum * 100}%, дългосрочна перспектива ${d.weights.longTerm * 100}%, приложимост ${d.weights.breadth * 100}%, обучение ${d.weights.learning * 100}%. Не е научно доказана прогноза.</div>
-  <div class="table-wrap"><table>
-    <thead><tr>${th('name', 'Умение')}${th('score', 'Score')}${th('demand', 'Търсене (30 д.)')}${th('change', 'Промяна')}${th('long', 'Дълг. перспектива')}<th>ESCO професии</th><th>Увереност</th></tr></thead>
-    <tbody>${list.map((s) => `<tr>
-      <td><a href="#/skill/${s.id}"><b>${esc(s.name)}</b></a>${s.wef ? ` <span class="badge b-forecast" title="WEF Future of Jobs 2025">WEF №${s.wef.rank}</span>` : ''}</td>
-      <td>${s.score !== null ? `<span class="score">${s.score}</span>` : NA('—')}</td>
-      <td class="num">${s.demandShare !== null ? `${fmtPct(s.demandShare)} <span class="muted small">(${s.postings}/${s.postingsTotal})</span>` : NA()}</td>
-      <td class="num">${change(s)}</td>
-      <td class="num">${s.longTerm !== null ? `${s.longTerm}/100` : NA()}</td>
-      <td class="num">${s.escoOccupations ?? NA('—')}</td>
-      <td>${confBadge(s.confidence)}</td></tr>`).join('')}</tbody>
-  </table></div>
-  <p class="small muted" style="margin-top:8px">Търсене = дял от обявите (Arbeitnow, Remotive) за последните 30 дни, в които се споменава умението. Изчислява се само при поне ${d.minPostings} обяви. Обявите са основно от Германия/ЕС и дистанционни – не са представителни за България.</p>`;
+  const list=d.skills.filter(s=>`${s.name} ${s.description}`.toLocaleLowerCase('bg').includes(skillQuery.toLocaleLowerCase('bg')));
+  const key={score:s=>s.score??-1,demand:s=>s.demandShare??-1,change:s=>s.change90??s.change30??-9,long:s=>s.longTerm??-1};
+  const sorted=[...list].sort((a,b)=>skillSort==='name'?a.name.localeCompare(b.name,'bg'):key[skillSort](b)-key[skillSort](a));
+  return `<div class="page-title"><p class="eyebrow">ИНВЕСТИРАЙ В СЕБЕ СИ</p><h1>Умения, които отварят врати.</h1><p class="muted">Разгледай уменията и открий с какво да започнеш.</p></div><input class="search" type="search" data-search="skill" aria-label="Търсене на умение" placeholder="⌕  Потърси умение" value="${esc(skillQuery)}"><p class="small muted">${list.length} умения</p><div class="grid g3">${list.map(s=>`<a class="card occ-card" href="#/skill/${s.id}"><span class="job-label">УМЕНИЕ</span><h3>${esc(s.name)}</h3><p class="small muted">${esc(s.description)}</p><span class="more">Разгледай умението ↗</span></a>`).join('')}</div>${list.length?'':'<p class="muted">Няма намерени умения.</p>'}<details class="disclosure" ${skillCompareOpen ? 'open' : ''} style="margin-top:24px"><summary>Сравнение на показателите</summary><div class="disclosure-body"><p class="small muted">Future Skills Score е относителна оценка от модела, а не научно доказана прогноза. Обявите са основно от Германия/ЕС и дистанционни и не са представителни за България.</p><div class="table-wrap"><table><thead><tr>${[['name','Умение'],['score','Оценка'],['demand','Търсене'],['change','Промяна'],['long','Перспектива']].map(([k,t])=>`<th><button data-sort="${k}" aria-label="Сортирай по ${t}">${t}${skillSort===k?' ↓':''}</button></th>`).join('')}<th>ESCO професии</th><th>Увереност</th></tr></thead><tbody>${sorted.map(s=>`<tr><td><a href="#/skill/${s.id}">${esc(s.name)}</a></td><td>${s.score??'—'}</td><td>${s.demandShare==null?NA():fmtPct(s.demandShare)}</td><td>${(s.change90??s.change30)==null?NA():(fmtNum((s.change90??s.change30)*100)+' п.п.')}</td><td>${s.longTerm??'—'}</td><td>${s.escoOccupations??'—'}</td><td>${confBadge(s.confidence)}</td></tr>`).join('')}</tbody></table></div></div></details>`;
 }
 
 async function pageSkill(id) {
-  const s = await api(`/api/skills/${encodeURIComponent(id)}`);
-  const d = s.details;
-  const comp = d?.components || {};
-  const LBL = { demand: 'Текущо търсене', momentum: 'Динамика 30/90 д.', longTerm: 'Дълг. перспектива', breadth: 'Приложимост', learning: 'Обучение' };
-  const hist = s.history.filter((h) => h.demand_share !== null).map((h) => ({ period: h.date, value: Math.round(h.demand_share * 1000) / 10 }));
-  const histScore = s.history.filter((h) => h.score !== null).map((h) => ({ period: h.date, value: h.score }));
-  return `
-  <a class="detail-back" href="#/skills">← Към уменията</a>
-  <div class="spread"><h1>${esc(s.name)}</h1>${s.score !== null ? `<span class="score" style="font-size:1.3rem;height:44px;min-width:64px">${s.score}</span>` : ''}</div>
-  <p class="lead muted">${esc(s.description)}</p>
-  <div class="grid g2">
-    <div class="card"><div class="spread"><h3>Компоненти на оценката</h3>${kindBadge('model')}</div>
-      ${Object.keys(LBL).map((k) => `<div class="bar"><span>${LBL[k]}</span><div class="meter"><i style="width:${comp[k] ?? 0}%"></i></div><b>${comp[k] ?? '—'}</b></div>`).join('')}
-      <p class="small muted" style="margin-top:10px">Персентил (0–100) спрямо останалите умения. „—“ = няма достатъчно данни; такъв компонент не участва в оценката. ${confBadge(s.confidence)}</p>
-    </div>
-    <div class="card"><div class="spread"><h3>Данни</h3>${kindBadge('fact')}</div>
-      <dl class="kv">
-        <dt>Търсене</dt><dd>${d?.demand?.share !== null && d?.demand?.share !== undefined ? `${fmtPct(d.demand.share)} от ${d.demand.total} обяви` : NA(`под ${d?.demand?.minRequired ?? 100} обяви`)}</dd>
-        <dt>Период</dt><dd>${esc(d?.window?.current || '—')}</dd>
-        <dt>Промяна 30 д.</dt><dd>${d?.change30?.value !== null && d?.change30?.value !== undefined ? `${(d.change30.value * 100).toFixed(2)} п.п.` : NA(d?.change30?.reason || '—')}</dd>
-        <dt>Промяна 90 д.</dt><dd>${d?.change90?.value !== null && d?.change90?.value !== undefined ? `${(d.change90.value * 100).toFixed(2)} п.п.` : NA(d?.change90?.reason || '—')}</dd>
-        <dt>ESCO</dt><dd>${s.esco ? `<a href="${esc(s.esco.uri)}" rel="noopener">${esc(s.esco.label_bg)}</a> · ${(s.esco.essential_for_count ?? 0)} съществено / ${(s.esco.optional_for_count ?? 0)} по избор за професии` : NA()}</dd>
-        <dt>WEF</dt><dd>${s.wef ? `„${esc(s.wef.label)}“ – №${s.wef.rank} растящо умение до 2030 ${kindBadge('forecast')}` : '—'}</dd>
-      </dl>
-    </div>
-  </div>
-  <div class="grid g2" style="margin-top:16px">
-    <div class="card"><h3>История: дял в обявите (%)</h3>${lineChart([hist], { unit: '%', names: ['Търсене'] })}</div>
-    <div class="card"><h3>История: Future Skills Score</h3>${lineChart([histScore], { names: ['Score'] })}</div>
-  </div>
-  <div class="grid g2" style="margin-top:16px">
-    <div class="card"><h3>Често се търси заедно с</h3>
-      ${d?.cooccurrence?.length ? `<ul class="ev">${d.cooccurrence.map((c) => `<li>${kindBadge('fact')}<span><a href="#/skill/${c.skill}">${esc(c.name)}</a> – ${c.n} общи обяви, lift ${String(c.lift).replace('.', ',')}</span></li>`).join('')}</ul>` : NA()}
-      <h3 style="margin-top:16px">Професии</h3><div class="chips">${s.occupations.map((o) => `<a class="chip ${o.core ? '' : 'alt'}" href="#/occupation/${o.id}">${esc(o.title)}</a>`).join('')}</div>
-    </div>
-    <div class="card"><h3>Къде да го науча</h3>
-      <ul class="ev">${s.resources.map((r) => `<li><span class="badge ${r.free ? 'b-ok' : 'b-off'}">${r.free ? 'безплатно' : 'платено'}</span><span><a href="${esc(r.url)}" rel="noopener" target="_blank">${esc(r.title)}</a><span class="src">${esc(r.provider)} · ${esc(r.lang)}</span></span></li>`).join('')}</ul>
-      <details><summary>Синоними, по които се разпознава в обявите</summary><p class="small muted">${s.synonyms.map(esc).join(', ')}</p></details>
-    </div>
-  </div>`;
+  const s=await api(`/api/skills/${encodeURIComponent(id)}`); const d=s.details, comp=d?.components||{};
+  const LBL={demand:'Текущо търсене',momentum:'Динамика 30/90 д.',longTerm:'Дългосрочна перспектива',breadth:'Приложимост',learning:'Обучение'};
+  const hist=s.history.filter(h=>h.demand_share!==null).map(h=>({period:h.date,value:Math.round(h.demand_share*1000)/10}));
+  const histScore=s.history.filter(h=>h.score!==null).map(h=>({period:h.date,value:h.score}));
+  return `<div class="detail-page"><a class="detail-back" href="#/skills">← Всички умения</a><p class="eyebrow">УМЕНИЕ</p><h1>${esc(s.name)}</h1><p class="lead muted">${esc(s.description)}</p><div class="disclosure-stack">
+  <details class="disclosure"><summary>Свързани професии</summary><div class="disclosure-body"><div class="chips">${s.occupations.map(o=>`<a class="chip ${o.core?'':'alt'}" href="#/occupation/${o.id}">${esc(o.title)} ↗</a>`).join('')||NA()}</div></div></details>
+  <details class="disclosure"><summary>Къде да науча това умение?</summary><div class="disclosure-body"><ul class="ev">${s.resources.map(r=>`<li><span class="badge ${r.free?'b-ok':'b-off'}">${r.free?'безплатно':'платено'}</span><span><a href="${esc(r.url)}" rel="noopener" target="_blank">${esc(r.title)} ↗</a><span class="src">${esc(r.provider)} · ${esc(r.lang)}</span></span></li>`).join('')||NA()}</ul></div></details>
+  <details class="disclosure"><summary>Търсене и перспектива</summary><div class="disclosure-body"><p><b>Оценка: ${s.score??'—'}/100</b> ${kindBadge('model')} ${confBadge(s.confidence)}</p><dl class="kv"><dt>Търсене</dt><dd>${d?.demand?.share!=null?`${fmtPct(d.demand.share)} от ${d.demand.total} обяви`:NA(`под ${d?.demand?.minRequired??100} обяви`)}</dd><dt>Период</dt><dd>${esc(d?.window?.current||'—')}</dd><dt>Промяна 30 дни</dt><dd>${d?.change30?.value!=null?`${(d.change30.value*100).toFixed(2)} п.п.`:NA(d?.change30?.reason||'—')}</dd><dt>Промяна 90 дни</dt><dd>${d?.change90?.value!=null?`${(d.change90.value*100).toFixed(2)} п.п.`:NA(d?.change90?.reason||'—')}</dd><dt>Перспектива</dt><dd>${s.longTerm!=null?`${s.longTerm}/100`:NA()}</dd><dt>WEF</dt><dd>${s.wef?`„${esc(s.wef.label)}“ – №${s.wef.rank} растящо умение до 2030 ${kindBadge('forecast')}`:'—'}</dd></dl><p class="small muted">Обявите са основно от Германия/ЕС и дистанционни — не са представителни за България. Оценката не е научно доказана прогноза.</p><h3>Компоненти на оценката</h3>${Object.keys(LBL).map(k=>`<div class="bar"><span>${LBL[k]}</span><div class="meter"><i style="width:${comp[k]??0}%"></i></div><b>${comp[k]??'—'}</b></div>`).join('')}<p class="small muted">Персентил спрямо останалите умения. Липсващите компоненти не участват в оценката.</p></div></details>
+  <details class="disclosure"><summary>История и още данни</summary><div class="disclosure-body"><h3>История: дял в обявите (%)</h3>${lineChart([hist],{unit:'%',names:['Търсене']})}<h3>История: оценка на умението</h3>${lineChart([histScore],{names:['Оценка']})}<h3>Често се търси заедно с</h3>${d?.cooccurrence?.length?`<ul class="ev">${d.cooccurrence.map(c=>`<li><span>${kindBadge('fact')}</span><span><a href="#/skill/${c.skill}">${esc(c.name)}</a> – ${c.n} общи обяви, lift ${String(c.lift).replace('.',',')}</span></li>`).join('')}</ul>`:NA()}<h3>ESCO</h3>${s.esco?`<p class="small muted">Автоматично съпоставяне — проверете дали съответства на умението: <a href="${esc(s.esco.uri)}" target="_blank" rel="noopener">${esc(s.esco.label_bg)}</a> · ${s.esco.essential_for_count??0} съществено / ${s.esco.optional_for_count??0} по избор за професии.</p>`:NA()}<details><summary>Синоними в обявите</summary><p class="small muted">${s.synonyms.map(esc).join(', ')}</p></details></div></details>
+  </div></div>`;
 }
 
 // ------------------------------------------------------------------ анкета
@@ -315,11 +191,11 @@ function renderResult(r) {
     <p class="muted">Интереси: <b>${esc(r.profile.topInterests.join(', '))}</b> · данни към ${fmtDate(r.dataAsOf)}</p></div>
     <button class="btn btn-ghost" data-act="restart">Започни отначало</button></div>
   ${!r.dataAsOf ? '<p class="notice">Все още няма импортирани данни от пазара на труда – препоръките се основават само на публикуваните прогнози и каталога.</p>' : ''}
-  <div class="legend" style="margin-bottom:12px">${kindBadge('fact')} реални данни ${kindBadge('forecast')} публикувана прогноза ${kindBadge('model')} изчисление на Future Jobs ${kindBadge('ai')} генериран от AI текст</div>
+  <details class="disclosure"><summary>Как да разбирам резултатите?</summary><div class="disclosure-body"><div class="legend">${kindBadge('fact')} реални данни ${kindBadge('forecast')} публикувана прогноза ${kindBadge('model')} изчисление на модела ${kindBadge('ai')} генериран от AI текст</div></div></details>
   <h2>Професии, подходящи за теб</h2>
   <div class="grid g3">${r.occupations.map((o) => `<a class="card occ-card" href="#/occupation/${o.id}" style="text-decoration:none">
     <div class="spread"><span class="badge b-model">съвпадение ${o.match}%</span><b class="small">перспектива ${o.outlook.index ?? '—'}/100</b></div>
-    <h3>${esc(o.title)}</h3><p class="small muted" style="margin:0">${esc(o.description)}</p><div class="small">${salaryLine(o.salary)}</div></a>`).join('')}</div>
+    <h3>${esc(o.title)}</h3><p class="small muted" style="margin:0">${esc(o.description)}</p><span class="more">Разгледай професията ↗</span></a>`).join('')}</div>
 
   <h2 style="margin-top:32px">Кои умения да развиваш и кога</h2>
   ${ai?.enabled && !ai.ok ? `<p class="small muted">AI обяснение не е показано: ${esc(ai.reason)}</p>` : ''}
@@ -329,12 +205,11 @@ function renderResult(r) {
     ${ai?.ok && ai.texts?.[h.key] ? `<div class="ai-box">${kindBadge('ai')} ${esc(ai.texts[h.key])}<div class="small muted">Модел ${esc(ai.model)} · само върху данните по-долу</div></div>` : ''}
     ${h.items.map((i) => `<div class="skill-rec">
       <h4><a href="#/skill/${i.skillId}">${esc(i.name)}</a></h4>
-      <p class="small${i.fact.insufficient ? ' muted' : ''}" style="margin:0 0 8px" title="${esc(`${i.fact.source} · ${i.fact.period}`)}">${kindBadge(i.fact.kind)} ${esc(i.fact.text)}</p>
-      ${firstStepHtml(i.firstStep)}
+      <details class="recommendation-detail"><summary>Защо и как да започна?</summary><div><p class="small${i.fact.insufficient ? ' muted' : ''}" title="${esc(`${i.fact.source} · ${i.fact.period}`)}">${kindBadge(i.fact.kind)} ${esc(i.fact.text)}</p>${firstStepHtml(i.firstStep)}</div></details>
     </div>`).join('')}
   </section>`).join('')}</div>
 
-  <section class="card" style="margin-top:28px">
+  <details class="disclosure" style="margin-top:28px"><summary>Изпрати резултатите на имейла си</summary><div class="disclosure-body">
     <h2>Изпрати резултатите на имейла си</h2>
     <p class="muted small">Ще получиш препоръките, източниците и насоките за развитие. Имейлът се използва само за това изпращане и не се съхранява.</p>
     <form class="form" id="email-form">
@@ -343,8 +218,8 @@ function renderResult(r) {
       <button class="btn btn-amber" type="submit">Изпрати</button>
       <p id="email-msg" class="small" role="status"></p>
     </form>
-  </section>
-  <section style="margin-top:20px"><ul class="small muted">${r.disclaimers.map((d) => `<li>${esc(d)}</li>`).join('')}</ul></section>`;
+  </div></details>
+  <details class="disclosure"><summary>Важно за резултатите</summary><div class="disclosure-body"><ul class="small muted">${r.disclaimers.map((d) => `<li>${esc(d)}</li>`).join('')}</ul></div></details>`;
 }
 
 // ------------------------------------------------------------------ данни и източници
@@ -359,7 +234,7 @@ async function pageData() {
   const RS = { success: 'b-ok', partial: 'b-warn', failed: 'b-err', skipped: 'b-off', running: 'b-fact' };
   const RSL = { success: 'успешно', partial: 'частично', failed: 'неуспешно', skipped: 'пропуснато', running: 'тече' };
   return `
-  <h1>Данни и източници</h1>
+  <div class="detail-page"><p class="eyebrow">ПРОЗРАЧНОСТ</p><h1>Откъде идват данните?</h1><p class="muted">Разгледай източниците, информация за пазара на труда и методологията на проекта.</p><div class="disclosure-stack"><details class="disclosure"><summary>Състояние на данните</summary><div class="disclosure-body">
   <div class="grid g4">
     <div class="card stat"><span class="small muted">Последна успешна актуализация</span><span class="v" style="font-size:1.1rem">${fmtDate(s.lastSuccessfulImport)}</span>
       ${s.stale ? `<span class="badge b-warn">${s.lastSuccessfulImport ? `остарели (> ${s.staleAfterHours} ч.)` : 'няма импорт'}</span>` : '<span class="badge b-ok">актуални</span>'}</div>
@@ -370,7 +245,7 @@ async function pageData() {
   <p class="small muted" style="margin-top:10px">${esc(s.schedule)}</p>
   ${s.storage?.warning ? `<p class="notice err" style="margin-top:10px">${esc(s.storage.warning)}</p>` : ''}
 
-  <section class="section">
+  </div></details><details class="disclosure"><summary>Пазарът на труда в цифри</summary><div class="disclosure-body"><section class="section">
     <div class="section-head"><h2>Пазарът на труда в цифри</h2><div class="legend">${kindBadge('fact')} официална статистика ${kindBadge('forecast')} публикувана прогноза</div></div>
     <div class="grid g2">
       <div class="card">
@@ -391,14 +266,14 @@ async function pageData() {
     </div>
   </section>
 
-  <section class="section">
+  </div></details><details class="disclosure"><summary>Най-бързо растящите умения</summary><div class="disclosure-body"><section class="section">
     <div class="section-head"><h2>Най-бързо растящите умения</h2>${kindBadge('forecast')}</div>
     <div class="grid g4">${market.wef.growingSkills.slice(0, 8).map((s) => `<div class="card"><span class="muted small">№${s.rank}</span><h3 style="margin:4px 0 0">${esc(s.label)}</h3></div>`).join('')}</div>
     <p class="small muted" style="margin-top:10px">${esc(market.wef.title)}, период ${esc(market.wef.period)}. <a href="#/skills">Виж как тези умения се търсят в реалните обяви →</a></p>
   </section>
 
 
-  <h2 style="margin-top:28px">Статус на източниците</h2>
+  </div></details><details class="disclosure"><summary>Статус на източниците</summary><div class="disclosure-body"><h2>Статус на източниците</h2>
   <div class="table-wrap"><table><thead><tr><th>Източник</th><th>Тип</th><th>Статус</th><th>Последен успех</th><th>Период на данните</th><th>Условия</th></tr></thead><tbody>
   ${s.sources.map((x) => `<tr>
     <td><a href="${esc(x.url)}" rel="noopener" target="_blank"><b>${esc(x.name)}</b></a><div class="small muted">${esc(x.updateFrequency)}</div></td>
@@ -410,17 +285,17 @@ async function pageData() {
     <td class="small muted" style="max-width:280px">${esc(x.terms)}</td></tr>`).join('')}
   </tbody></table></div>
 
-  <h2 style="margin-top:28px">История на обновяванията</h2>
+  </div></details><details class="disclosure"><summary>История на обновяванията</summary><div class="disclosure-body"><h2>История на обновяванията</h2>
   ${s.runs.length ? `<div class="table-wrap"><table><thead><tr><th>#</th><th>Дата</th><th>Задействане</th><th>Статус</th><th>Резултат</th></tr></thead><tbody>
   ${s.runs.map((r) => `<tr><td>${r.id}</td><td class="num">${fmtDate(r.started_at)}</td><td>${esc({ scheduled: 'планирано', manual: 'ръчно', cli: 'команда' }[r.trigger] || r.trigger)}</td>
     <td><span class="badge ${RS[r.status] || 'b-off'}">${RSL[r.status] || esc(r.status)}</span></td>
     <td class="small">${esc(r.message || '')}${r.sources.length ? `<details><summary>По източници</summary><ul>${r.sources.map((x) => `<li><b>${esc(x.source_id)}</b>: ${esc(x.status)} – нови ${x.inserted}, обновени ${x.updated}, дубликати ${x.duplicates}, отхвърлени ${x.rejected}${x.error ? ` · <span style="color:var(--coral)">${esc(x.error.slice(0, 200))}</span>` : ''}</li>`).join('')}</ul></details>` : ''}</td></tr>`).join('')}
   </tbody></table></div>` : NA('Още няма изпълнения.')}
 
-  <h2 style="margin-top:28px">Методология</h2>
-  <div class="card"><p>Фактическите данни (Eurostat, ESCO, обяви) се показват отделно от публикуваните прогнози (Cedefop, WEF) и от изчисленията на модела на Future Jobs. Пълното описание на формулите, теглата и ограниченията е в <a href="/METHODOLOGY.md">METHODOLOGY.md</a>.</p></div>
+  </div></details><details class="disclosure"><summary>Методология</summary><div class="disclosure-body"><h2>Методология</h2>
+  <p>Фактическите данни (Eurostat, ESCO, обяви) се показват отделно от публикуваните прогнози (Cedefop, WEF) и от изчисленията на модела на Future Jobs.</p><pre id="methodology-text" class="methodology">Зареждане…</pre>
 
-  <h2 style="margin-top:28px">Администрация</h2>
+  </div></details><details class="disclosure"><summary>Администрация</summary><div class="disclosure-body"><h2>Администрация</h2>
   <form class="card form" id="admin-form">
     <p class="small muted" style="margin:0">Ръчно обновяване на данните (изисква администраторски токен; токенът не се запазва).</p>
     <input type="password" name="token" placeholder="ADMIN_TOKEN" autocomplete="off" aria-label="Администраторски токен" value="${esc(adminToken)}">
@@ -432,7 +307,7 @@ async function pageData() {
     <input type="email" name="to" placeholder="Получател (по подразбиране SMTP_USER)" aria-label="Получател на тестовия имейл">
     <button class="btn btn-ghost" type="submit">Изпрати тестов имейл</button>
     <div id="test-email-msg" class="small" role="status"></div>
-  </form>`;
+  </form></div></details></div></div>`;
 }
 
 // ------------------------------------------------------------------ рутер
@@ -451,6 +326,7 @@ async function render({ scroll = true } = {}) {
   const r = routes.find(([re]) => re.test(hash)) || routes[0];
   const m = hash.match(r[0]);
   document.querySelectorAll('.nav a').forEach((a) => a.classList.toggle('active', a.dataset.route === r[1]));
+  document.querySelector('.nav').classList.remove('open'); document.querySelector('.menu-toggle').setAttribute('aria-expanded', 'false');
   if (scroll) $main.innerHTML = '<p class="loading">Зареждане…</p>';
   try {
     $main.innerHTML = await r[2](m && m[1]);
@@ -460,11 +336,35 @@ async function render({ scroll = true } = {}) {
   if (scroll) { window.scrollTo(0, 0); $main.focus({ preventScroll: true }); }
 }
 
+$main.addEventListener('toggle', async (e) => {
+  const details = e.target;
+  if (!(details instanceof HTMLDetailsElement) || !details.open) return;
+  const text = details.querySelector('#methodology-text');
+  if (!text || text.dataset.loaded) return;
+  try { const response = await fetch('/METHODOLOGY.md'); if (!response.ok) throw new Error(); text.textContent = await response.text(); text.dataset.loaded = 'true'; }
+  catch { text.textContent = 'Методологията не можа да се зареди. Опитай отново.'; }
+}, true);
+
+$main.addEventListener('input', async (e) => {
+  const input = e.target;
+  if (!(input instanceof HTMLInputElement) || !input.dataset.search) return;
+  const position = input.selectionStart;
+  if (input.dataset.search === 'occupation') occQuery = input.value;
+  if (input.dataset.search === 'skill') skillQuery = input.value;
+  await render({ scroll: false });
+  const replacement = $main.querySelector(`input[data-search="${input.dataset.search}"]`);
+  if (replacement) { replacement.focus(); if (position !== null) { try { replacement.setSelectionRange(position, position); } catch { /* browser may not support selection for search */ } } }
+});
+
+document.querySelector('.menu-toggle').addEventListener('click', (e) => {
+  const nav = document.querySelector('.nav'); const open = nav.classList.toggle('open');
+  e.currentTarget.setAttribute('aria-expanded', String(open));
+});
 $main.addEventListener('click', async (e) => {
   const t = /** @type {HTMLElement} */ (e.target).closest('button');
   if (!t) return;
   if (t.dataset.filter !== undefined) { occFilter = t.dataset.filter || null; return render({ scroll: false }); }
-  if (t.dataset.sort) { skillSort = t.dataset.sort; return render({ scroll: false }); }
+  if (t.dataset.sort) { skillSort = t.dataset.sort; skillCompareOpen = true; return render({ scroll: false }); }
   if (t.dataset.opt) {
     const { q, opt, type } = t.dataset;
     const max = Number(t.dataset.max);
