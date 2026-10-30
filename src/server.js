@@ -14,7 +14,9 @@ import { QUIZ, INTERESTS } from './catalog/quiz.js';
 import { latestSkillMetrics, skillHistory, occupationOutlook, employmentTrend, WEIGHTS, MODEL_VERSION, MIN_POSTINGS } from './model/scoring.js';
 import { recommend, salaryFor, planFor } from './model/recommend.js';
 import { explainWithAi } from './ai.js';
-import { buildResultEmail, sendSmtp, isValidEmail, hashEmail, explainSmtpError } from './email.js';
+import { streamWithFallback } from './assistant/gemini.js';
+import { buildSystemInstruction } from './assistant/knowledge.js';
+import { buildResultEmail, sanitizePlans, sendSmtp, isValidEmail, hashEmail, explainSmtpError } from './email.js';
 import { runRefresh, AlreadyRunningError } from './pipeline.js';
 import { localProvider, blobProvider, loadVercelBlob, StorageConflictError } from './storage.js';
 import { nextSofiaRun } from './lib/time.js';
@@ -34,13 +36,17 @@ class HttpError extends Error {
   constructor(status, message) { super(message); this.status = status; }
 }
 
+const SECURITY_HEADERS = {
+  'X-Content-Type-Options': 'nosniff',
+  'Referrer-Policy': 'strict-origin-when-cross-origin',
+  'Content-Security-Policy': "default-src 'self'; img-src 'self' data: https://www.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; script-src 'self' https://www.gstatic.com https://www.google.com https://www.recaptcha.net; connect-src 'self' https://*.googleapis.com https://www.google.com https://www.gstatic.com; frame-src https://www.google.com https://recaptcha.google.com https://www.recaptcha.net; frame-ancestors 'none'",
+};
+
 function send(res, status, body, headers = {}) {
   const isJson = typeof body !== 'string' && !Buffer.isBuffer(body);
   res.writeHead(status, {
     'Content-Type': isJson ? 'application/json; charset=utf-8' : headers['Content-Type'] || 'text/plain; charset=utf-8',
-    'X-Content-Type-Options': 'nosniff',
-    'Referrer-Policy': 'strict-origin-when-cross-origin',
-    'Content-Security-Policy': "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; script-src 'self'; connect-src 'self'; frame-ancestors 'none'",
+    ...SECURITY_HEADERS,
     ...headers,
   });
   res.end(isJson ? JSON.stringify(body) : body);
@@ -81,9 +87,9 @@ function rateLimiter(max, windowMs) {
 
 /**
  * Връща (req, res) handler – използва се и от Node сървъра, и от Vercel функцията (api/index.js).
- * @param {{db?:any, provider?:import('./storage.js').Provider, config:any, refreshImpl?:Function, sendMail?:Function, aiImpl?:Function}} o
+ * @param {{db?:any, provider?:import('./storage.js').Provider, config:any, refreshImpl?:Function, sendMail?:Function, aiImpl?:Function, assistantFetch?:typeof fetch}} o
  */
-export function createHandler({ db: initialDb, provider, config, refreshImpl = runRefresh, sendMail = sendSmtp, aiImpl = explainWithAi }) {
+export function createHandler({ db: initialDb, provider, config, refreshImpl = runRefresh, sendMail = sendSmtp, aiImpl = explainWithAi, assistantFetch = undefined }) {
   if (!provider) {
     if (!initialDb) throw new Error('createHandler: нужен е db или provider');
     syncSources(initialDb);
@@ -94,6 +100,28 @@ export function createHandler({ db: initialDb, provider, config, refreshImpl = r
   const alwaysWait = provider.mode !== 'local';
   const emailLimit = rateLimiter(5, 3600 * 1000);
   const recLimit = rateLimiter(60, 3600 * 1000);
+  const assistantLimit = rateLimiter(30, 10 * 60 * 1000);
+
+  /** Проверява историята на чата от браузъра: само роли user/model, ограничена дължина. */
+  function chatContents(body) {
+    const msgs = Array.isArray(body?.messages) ? body.messages.slice(-16) : [];
+    const out = msgs.map((m) => ({ role: m?.role === 'model' ? 'model' : m?.role === 'user' ? 'user' : null, text: String(m?.text ?? '').trim().slice(0, 1500) }))
+      .filter((m) => m.role && m.text);
+    while (out.length && out[0].role !== 'user') out.shift(); // Gemini иска разговорът да започва с user
+    if (!out.length || out[out.length - 1].role !== 'user') throw new HttpError(400, 'Няма въпрос');
+    let total = 0;
+    for (let i = out.length - 1; i >= 0; i--) { total += out[i].text.length; if (total > 8000) return out.slice(i + 1); }
+    return out;
+  }
+
+  function assistantContext() {
+    const last = getMeta(db, 'last_successful_import_at');
+    return {
+      status: last ? `Последно успешно обновяване на данните: ${new Date(last).toLocaleString('bg-BG', { timeZone: 'Europe/Sofia' })} (българско време). Днес е ${new Date().toLocaleDateString('bg-BG', { timeZone: 'Europe/Sofia' })}.` : 'Все още няма успешно обновяване на данните.',
+      occupations: OCCUPATIONS.map((o) => ({ id: o.id, title: o.title })),
+      skills: SKILLS.map((x) => ({ id: x.id, name: x.name })),
+    };
+  }
   let backgroundRun = null;
 
   function startRefresh(opts) {
@@ -260,7 +288,7 @@ export function createHandler({ db: initialDb, provider, config, refreshImpl = r
       let rec;
       try { rec = recommend(db, body.answers); } catch (err) { throw new HttpError(400, err.message); }
       const ai = body.ai === false ? { enabled: false } : await aiImpl(rec, config.anthropic);
-      const mail = buildResultEmail(rec, ai, config.publicUrl);
+      const mail = buildResultEmail(rec, ai, config.publicUrl, sanitizePlans(body.plans, rec));
       // На Vercel потребителските заявки не пишат в базата (тя е споделен файл в Blob) – само лог.
       const logEmail = (status, error = null) => {
         if (provider.userWrites) db.prepare('INSERT INTO email_log(sent_at, email_hash, status, error) VALUES (?, ?, ?, ?)').run(new Date().toISOString(), hashEmail(email), status, error);
@@ -274,6 +302,27 @@ export function createHandler({ db: initialDb, provider, config, refreshImpl = r
         throw new HttpError(502, 'Имейлът не можа да бъде изпратен. Опитай отново по-късно.');
       }
       return send(res, 200, { ok: true });
+    }
+    // Чат асистент: прокси към Google AI Studio (Gemini) с резервни модели; ключът е само тук.
+    if (req.method === 'POST' && p === '/api/assistant') {
+      if (!config.gemini?.apiKey) throw new HttpError(503, 'Асистентът не е конфигуриран (липсва GEMINI_API_KEY).');
+      if (!assistantLimit(ip)) throw new HttpError(429, 'Задаваш въпроси твърде бързо. Опитай пак след няколко минути.');
+      const contents = chatContents(await readJson(req, 32 * 1024));
+      let result;
+      try {
+        result = await streamWithFallback({ apiKey: config.gemini.apiKey, models: config.gemini.models, systemInstruction: buildSystemInstruction(assistantContext()), contents, fetchImpl: assistantFetch });
+      } catch (err) {
+        console.warn(JSON.stringify({ event: 'assistant_failed', error: String(err.message).slice(0, 300), tried: (err.errors || []).map((e) => `${e.model}:${e.status}`) }));
+        throw new HttpError(503, 'Асистентът е зает в момента. Опитай отново след минута.');
+      }
+      res.writeHead(200, { ...SECURITY_HEADERS, 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store', 'X-Assistant-Model': result.model });
+      try {
+        for await (const chunk of result.stream) res.write(chunk);
+      } catch (err) {
+        console.warn(JSON.stringify({ event: 'assistant_stream_error', model: result.model, error: String(err.message).slice(0, 200) }));
+        res.write('\n\n_(Отговорът прекъсна. Опитай отново.)_');
+      }
+      return res.end();
     }
     // Планирани endpoint-и, защитени с CRON_SECRET (Authorization: Bearer ...).
     //  /api/cron/daily   – за Vercel Cron (GET); изпълнява само ако в София е 06:xx ч.

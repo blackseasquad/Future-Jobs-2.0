@@ -84,8 +84,20 @@ test('препоръки и изпращане на имейл (без запи�
   assert.equal(ok.status, 200);
   assert.equal(sent.length, 1);
   assert.match(sent[0].html, /6–12 месеца/);
+  assert.match(sent[0].html, /сигнала за перспектива са положителни/);
+  assert.doesNotMatch(sent[0].html, /индекс на перспективата/);
+  // личен план от Gemini: приема се само за умения от резултата и без линкове
+  const sid = rec.horizons[0].items[0].skillId;
+  const withPlan = await post('/api/email', { answers: ANSWERS, email: 'ucenik@example.com', consent: true, plans: {
+    [sid]: { why: 'Защото обичаш да помагаш.', steps: ['Първо', 'Второ', 'Трето'] },
+    other_skill: { why: 'чужд', steps: ['x'] },
+    [rec.horizons[1].items[0].skillId]: { why: 'виж https://spam.example', steps: ['a'] } } });
+  assert.equal(withPlan.status, 200);
+  assert.match(sent[1].html, /AI текст \(Gemini\)/);
+  assert.match(sent[1].html, /Защото обичаш да помагаш/);
+  assert.doesNotMatch(sent[1].html, /spam\.example|чужд/);
   const log = db.prepare('SELECT * FROM email_log').all();
-  assert.equal(log.length, 1);
+  assert.equal(log.length, 2);
   assert.ok(!JSON.stringify(log).includes('ucenik'));
 });
 

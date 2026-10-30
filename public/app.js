@@ -1,6 +1,9 @@
 // Future Jobs – frontend (без библиотеки). Данните идват само от /api/*.
 // Важно: frontend-ът НЕ обновява данните периодично – ежедневният импорт е задача на сървъра.
 
+import { personalPlan, pingGemini } from './gemini.js';
+import { mountAssistant } from './assistant.js';
+
 const $main = document.getElementById('main');
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const fmtDate = (iso) => (iso ? new Date(iso).toLocaleString('bg-BG', { timeZone: 'Europe/Sofia', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—');
@@ -91,6 +94,12 @@ const acc = (title, body, { open = false, hint = '', id = '' } = {}) =>
   `<details class="acc"${open ? ' open' : ''}${id ? ` id="${id}"` : ''}><summary>${title}${hint ? `<span class="hint">${hint}</span>` : ''}</summary><div class="acc-body">${body}</div></details>`;
 const kpi = (label, value, sub = '') => `<div class="kpi"><span class="l">${label}</span><span class="v">${value}</span>${sub ? `<span class="s">${sub}</span>` : ''}</div>`;
 const outlookWord = (i) => (i === null || i === undefined ? '—' : i >= 67 ? 'Висока' : i >= 40 ? 'Добра' : 'Умерена');
+/** „3 от 4 сигнала са положителни“ – вместо грубия индекс 0–100, който често съвпада при различни професии. */
+const outlookPhrase = (o) => {
+  const sig = o?.signals || [];
+  if (!sig.length) return 'няма достатъчно сигнали';
+  return `${sig.filter((x) => x.value > 0).length} от ${sig.length} сигнала са положителни`;
+};
 const SKILL_CAT = { tech: 'Технологии', data: 'Данни и анализ', business: 'Бизнес', care: 'Грижа и помощ', creative: 'Творчество', green: 'Зелени умения', hands_on: 'Практически умения', human: 'Човешки умения', language: 'Езици' };
 
 // Клиентско търсене в каталозите (без презареждане на данни)
@@ -220,7 +229,7 @@ async function pageOccupation(id) {
   const lastEmp = emp.BG?.series?.length ? emp.BG.series[emp.BG.series.length - 1] : null;
   const kpis = `<div class="kpis">
     ${kpi('Заплата в България', sal?.bg ? `≈ ${fmtNum(sal.bg.monthly)} €` : '—', sal?.bg ? `бруто/месец · ${sal.bg.isEstimate ? `оценка ${esc(sal.bg.period.split(' – ').pop())}` : `Eurostat ${esc(sal.bg.period)}`}` : 'няма данни')}
-    ${kpi('Перспектива до 2035', outlookWord(o.outlook.index), o.outlook.index !== null ? `индекс ${o.outlook.index}/100${o.wefFastest ? ` · WEF +${o.wefFastest.pct}%` : ''}` : 'няма достатъчно сигнали')}
+    ${kpi('Перспектива до 2035', outlookWord(o.outlook.index), outlookPhrase(o.outlook))}
     ${kpi(`Заети в групата в България`, lastEmp ? `${fmtNum(Math.round(lastEmp.value))} хил.` : '—', lastEmp ? `„${esc(o.iscoLabel)}“ · ${esc(lastEmp.period)}` : 'няма данни')}
   </div>`;
   return `
@@ -230,7 +239,7 @@ async function pageOccupation(id) {
     <div class="acc-list">
       ${acc('Основни умения', `<div class="chips">${o.coreSkills.map((s) => `<a class="chip" href="#/skill/${s.id}">${esc(s.name)}</a>`).join('')}</div>`, { open: true })}
       ${acc('Допълващи умения', `<div class="chips">${o.complementarySkills.map((s) => `<a class="chip alt" href="#/skill/${s.id}">${esc(s.name)}</a>`).join('')}</div>`)}
-      ${acc('Перспектива', `<p class="small muted">Индекс ${o.outlook.index ?? '—'}/100 – дял на положителните сигнали от наличните. ${kindBadge('model')} Модел на Future Jobs, не прогноза за брой работни места.</p>${signalsList(o.outlook.signals)}`)}
+      ${acc('Перспектива', `<p class="small muted">${esc(outlookPhrase(o.outlook))}. ${kindBadge('model')} Обобщение на Future Jobs, не прогноза за брой работни места.</p>${signalsList(o.outlook.signals)}`)}
       ${acc('Заплащане', sal?.bg ? `
         <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap"><span class="big-num">≈ ${fmtNum(sal.bg.monthly)} €</span><span class="muted">бруто на месец</span>${sal.bg.isEstimate ? kindBadge('model') : kindBadge('fact')}</div>
         <dl class="kv">
@@ -388,12 +397,56 @@ function firstStepHtml(st) {
   return `<div class="step"><span class="k">Първа стъпка · ${esc(st.label || STEP_LABEL[st.type] || '')}</span><span>${body}</span></div>`;
 }
 
+// ------------------------------------------------------------------ Gemini (Firebase AI Logic)
+const gemState = {}; // skillId -> {status:'loading'|'ok'|'error', plan?, error?}
+
+function geminiBody(skillId) {
+  const st = gemState[skillId];
+  const head = (t) => `<div class="gem-h"><span>${t}</span><span class="badge b-ai">Gemini · AI текст</span></div>`;
+  if (!st || st.status === 'loading') return `${head('✦ Gemini пише твоя план…')}<div class="sk" style="width:92%"></div><div class="sk" style="width:78%"></div><div class="sk" style="width:85%"></div>`;
+  if (st.status === 'error') return `<p class="small muted">Личният план от Gemini не е наличен в момента (${esc(st.error)}). Опитай отново по-късно – първата стъпка по-горе е готова за теб.</p>`;
+  return `${head('✦ Твоят личен план')}<p><b>Защо за теб:</b> ${esc(st.plan.why)}</p>
+    <ol>${st.plan.steps.map((x) => `<li><b>${esc(x.when)}:</b> ${esc(x.text)}</li>`).join('')}</ol>
+    <span class="small muted">Генерирано от ${esc(st.model || 'Gemini')} по отговорите ти. Може да греши – провери преди да действаш.</span>`;
+}
+
+async function loadGemini(skillId, horizonKey) {
+  const r = quizState.result;
+  if (!r || gemState[skillId]?.status === 'loading' || gemState[skillId]?.status === 'ok') return;
+  const h = r.horizons.find((x) => x.key === horizonKey);
+  const item = h?.items.find((x) => x.skillId === skillId);
+  if (!item) return;
+  gemState[skillId] = { status: 'loading' };
+  const paint = () => { const el = document.getElementById(`gem-${skillId}`); if (el) el.innerHTML = geminiBody(skillId); };
+  paint();
+  try {
+    const { questions } = await cached('quiz', () => api('/api/quiz'));
+    const answers = questions.flatMap((q) => {
+      const a = quizState.answers[q.id];
+      const ids = Array.isArray(a) ? a : a ? [a] : [];
+      const txt = ids.map((id) => q.options.find((o) => o.id === id)?.text).filter(Boolean);
+      return txt.length ? [{ question: q.text, answer: txt.join(', ') }] : [];
+    });
+    const plan = await personalPlan({
+      answers, interests: r.profile.topInterests, skill: item.name, description: item.description || '',
+      horizon: `${h.label} (${h.subtitle})`, firstStep: item.firstStep.text, fact: `${item.fact.text} (${item.fact.source}, ${item.fact.period})`,
+      occupation: r.occupations[0]?.title || '',
+    });
+    gemState[skillId] = { status: 'ok', plan, model: 'Gemini' };
+  } catch (err) {
+    console.warn('Gemini:', err);
+    gemState[skillId] = { status: 'error', error: /app-check|appCheck|recaptcha/i.test(String(err?.message)) ? 'неуспешна защитна проверка' : /quota|429|RESOURCE_EXHAUSTED/i.test(String(err?.message)) ? 'достигнат е дневният лимит' : 'няма връзка' };
+  }
+  paint();
+}
+
 function renderResult(r) {
   const ai = r.ai;
   const [top, ...others] = r.occupations;
   return `
   <section class="sec top"><div class="wrap stack" style="gap:20px">
     ${pageHead({ eyebrow: 'Твоят резултат', title: 'Твоят план за бъдещите умения', lead: `Какво да учиш днес – и кога. По интересите ти: <b style="color:var(--ink)">${esc(r.profile.topInterests.join(', '))}</b>` })}
+    <span class="gem-chip">✦ Личните планове пише Gemini по твоите отговори</span>
     ${!r.dataAsOf ? '<p class="notice">Все още няма импортирани данни от пазара на труда – препоръките се основават само на публикуваните прогнози и каталога.</p>' : ''}
     ${r.knownSkills?.length ? `<p class="small muted">Вече владееш: ${esc(r.knownSkills.join(', '))} – не е включено в плана.</p>` : ''}
     <div class="hz-grid">${r.horizons.map((h) => `<div class="hz ${h.key}">
@@ -403,7 +456,10 @@ function renderResult(r) {
         ${h.items.map((i) => `<div class="hz-item">
           <h3><a href="#/skill/${i.skillId}">${esc(i.name)}</a></h3>
           ${firstStepHtml(i.firstStep)}
-          <details class="mini"><summary>Защо това умение?</summary><p>${kindBadge(i.fact.kind)} ${esc(i.fact.text)} <span class="muted small">(${esc(i.fact.source)} · ${esc(i.fact.period)})</span></p></details>
+          <details class="mini gem-det" data-gemini="${i.skillId}" data-horizon="${h.key}"><summary>✦ Защо и как да започна?</summary>
+            <div class="gem" id="gem-${i.skillId}">${geminiBody(i.skillId)}</div>
+            <p class="gem-src">Данни зад препоръката: ${kindBadge(i.fact.kind)} ${esc(i.fact.text)} <span class="muted">(${esc(i.fact.source)} · ${esc(i.fact.period)})</span></p>
+          </details>
         </div>`).join('')}
       </div>
     </div>`).join('')}</div>
@@ -420,10 +476,10 @@ function renderResult(r) {
         <p class="small">Съвпадение с интересите: ${r.occupations.map((o) => `${esc(o.title)} ${o.match}%`).join(' · ')} ${kindBadge('model')}</p>`) : ''}
     </div>
     <div class="card mail-card">
-      <div style="display:flex;flex-direction:column;gap:4px"><h2>Изпрати плана на имейла си</h2><span class="card-desc" style="font-size:14px">С източниците и насоките. Имейлът не се съхранява.</span></div>
+      <div style="display:flex;flex-direction:column;gap:4px"><h2>Изпрати плана на имейла си</h2><span class="card-desc" style="font-size:14px">С източниците и личните планове от Gemini, които си отворил. Имейлът не се съхранява.</span></div>
       <form class="mail-form" id="email-form">
         <div class="mail-row"><input id="email-input" type="email" name="email" required placeholder="ime@example.com" autocomplete="email" aria-label="Имейл"><button class="btn" type="submit">Изпрати</button></div>
-        <label class="check"><input type="checkbox" name="consent" required> Съгласен/съгласна съм да получа плана</label>
+        <span class="small muted">Изпращаме плана само веднъж, на този адрес.</span>
         <span id="email-msg" role="status"></span>
       </form>
     </div>
@@ -500,6 +556,12 @@ async function pageData() {
           <div class="row"><button class="btn" type="submit" ${s.running ? 'disabled' : ''}>${s.running ? 'Обновяване тече…' : 'Обнови сега'}</button></div>
           <p id="admin-msg" class="small" role="status"></p>
         </form>
+        <div class="form">
+          <b>Тест на Gemini</b>
+          <p class="small muted">Една кратка заявка към Gemini през Firebase AI Logic (с App Check). Не изисква токен.</p>
+          <div class="row"><button class="btn btn-ghost" type="button" data-act="ping-gemini">Провери Gemini</button></div>
+          <div id="gemini-msg" class="small" role="status"></div>
+        </div>
         <form class="form" id="test-email-form">
           <b>Тест на имейла</b>
           <p class="small muted">Изпраща пробен имейл и показва точната грешка от пощенския сървър (използва токена по-горе).</p>
@@ -578,8 +640,17 @@ $main.addEventListener('click', async (e) => {
   if (act === 'back') { quizState.step--; return render({ scroll: false }); }
   if (act === 'next') { quizState.step++; return render({ scroll: false }); }
   if (act === 'restart') { Object.assign(quizState, { step: 0, answers: {}, result: null, error: null }); return render(); }
+  if (act === 'ping-gemini') {
+    const out = document.getElementById('gemini-msg');
+    t.setAttribute('disabled', ''); out.textContent = 'Проверка…';
+    try { const g = await pingGemini(); out.innerHTML = `✅ Gemini работи (${esc(g.model)}, App Check: ${esc(g.provider)}) за ${g.ms} ms.`; }
+    catch (err) { out.innerHTML = `<span style="color:var(--err-ink)">✕ ${esc(String(err?.message || err))}</span><br>Провери App Check: доставчикът (v3 или enterprise) във firebase-config.js трябва да съвпада с регистрирания във Firebase → Security → App Check, а домейнът – с този в reCAPTCHA.`; }
+    t.removeAttribute('disabled');
+    return;
+  }
   if (act === 'submit') {
     t.setAttribute('disabled', ''); t.textContent = 'Изчисляване…';
+    Object.keys(gemState).forEach((k) => delete gemState[k]);
     try { quizState.result = await api('/api/recommendations', { method: 'POST', body: JSON.stringify({ answers: quizState.answers }) }); quizState.error = null; }
     catch (err) { quizState.error = err.message; }
     return render();
@@ -597,7 +668,8 @@ $main.addEventListener('submit', async (e) => {
     const email = String(fd.get('email') || '').trim();
     btn.disabled = true; msg.textContent = 'Изпращане…';
     try {
-      await api('/api/email', { method: 'POST', body: JSON.stringify({ answers: quizState.answers, email, consent: fd.get('consent') === 'on', ai: Boolean(quizState.result?.ai?.ok) }) });
+      await api('/api/email', { method: 'POST', body: JSON.stringify({ answers: quizState.answers, email, consent: true, ai: Boolean(quizState.result?.ai?.ok),
+        plans: Object.fromEntries(Object.entries(gemState).filter(([, v]) => v.status === 'ok').map(([k, v]) => [k, { why: v.plan.why, steps: v.plan.steps.map((x) => x.text) }])) }) });
       msg.className = '';
       msg.innerHTML = `✓ Изпратено на <b>${esc(email)}</b>. Провери пощата си (и папка „Спам“). Сгрешен адрес? Поправи го и натисни „Изпрати отново“.`;
       btn.textContent = 'Изпрати отново';
@@ -647,6 +719,12 @@ $main.addEventListener('change', (e) => {
   if (el.matches?.('[data-sort-select]')) { skillSort = el.value; render({ scroll: false }); }
 });
 
+$main.addEventListener('toggle', (e) => {
+  const d = /** @type {HTMLDetailsElement} */ (e.target);
+  if (d.open && d.dataset?.gemini) loadGemini(d.dataset.gemini, d.dataset.horizon);
+}, true);
+
 window.addEventListener('hashchange', () => render());
 loadFreshness();
 render();
+mountAssistant();

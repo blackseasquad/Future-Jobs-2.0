@@ -11,9 +11,35 @@ export const hashEmail = (e) => crypto.createHash('sha256').update(String(e).tri
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const KIND = { fact: 'Факт', forecast: 'Прогноза', model: 'Модел на Future Jobs', ai: 'AI текст' };
 
-export function buildResultEmail(rec, ai, publicUrl) {
+const STEP_WHEN = ['Тази седмица', 'До месец', 'След 3 месеца'];
+const clean = (v, max) => String(v ?? '').replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, max);
+
+/**
+ * Личните планове от Gemini идват от браузъра – приемаме ги само за уменията в този резултат,
+ * с ограничена дължина и без линкове/HTML (иначе формата би служила за изпращане на произволен текст).
+ * @returns {Record<string, {why:string, steps:string[]}>}
+ */
+export function sanitizePlans(plans, rec) {
+  const allowed = new Set(rec.horizons.flatMap((h) => h.items.map((i) => i.skillId)));
+  /** @type {Record<string, {why:string, steps:string[]}>} */
+  const out = {};
+  if (!plans || typeof plans !== 'object') return out;
+  for (const [id, v] of Object.entries(plans).slice(0, 12)) {
+    if (!allowed.has(id) || !v || typeof v !== 'object') continue;
+    const why = clean(v.why, 300);
+    const steps = Array.isArray(v.steps) ? v.steps.slice(0, 3).map((x) => clean(x, 220)).filter(Boolean) : [];
+    if (!why || steps.length === 0) continue;
+    if (/https?:|www\.|<|>/i.test([why, ...steps].join(' '))) continue;
+    out[id] = { why, steps };
+  }
+  return out;
+}
+
+const outlookPhrase = (o) => (o?.signals?.length ? `${o.signals.filter((x) => x.value > 0).length} от ${o.signals.length} сигнала за перспектива са положителни` : '');
+
+export function buildResultEmail(rec, ai, publicUrl, plans = {}) {
   const occ = rec.occupations.map((o) => `<li><b>${esc(o.title)}</b> – съвпадение ${o.match}%` +
-    (o.outlook.index !== null ? `, индекс на перспективата ${o.outlook.index}/100` : '') +
+    (outlookPhrase(o.outlook) ? `, ${outlookPhrase(o.outlook)}` : '') +
     (o.salary?.bg ? `<br><small>Средна брутна заплата в България: ≈ ${o.salary.bg.monthly.toLocaleString('bg-BG')} EUR/мес. – „${esc(o.salary.group)}“${o.salary.sector ? ` в „${esc(o.salary.sector)}“` : ''} (${o.salary.bg.isEstimate ? `оценка за ${esc(o.salary.bg.period)}` : `Eurostat SES ${esc(o.salary.bg.period)}`})</small>` : '') +
     '</li>').join('');
   const hz = rec.horizons.map((h) => `
@@ -24,6 +50,9 @@ export function buildResultEmail(rec, ai, publicUrl) {
         <b style="font-size:16px">${esc(i.name)}</b>${i.score !== null ? ` <span style="color:#0b2554">· Future Skills Score ${i.score}/100</span>` : ''}
         <p style="margin:6px 0">${i.why.map(esc).join(' ')}</p>
         <ul style="margin:4px 0;padding-left:18px">${i.evidence.map((e) => `<li><small><b>${KIND[e.kind]}:</b> ${esc(e.text)} <i>(${esc(e.source)}; ${esc(e.period)})</i></small></li>`).join('')}</ul>
+        ${plans[i.skillId] ? `<div style="border-left:3px solid #4cc3f5;background:#fbfdff;padding:8px 12px;margin:8px 0;border-radius:6px"><small><b>Личен план – AI текст (Gemini)</b>, по твоите отговори; може да греши</small>
+          <p style="margin:6px 0"><b>Защо за теб:</b> ${esc(plans[i.skillId].why)}</p>
+          <ol style="margin:0;padding-left:18px">${plans[i.skillId].steps.map((t, k) => `<li><b>${STEP_WHEN[k]}:</b> ${esc(t)}</li>`).join('')}</ol></div>` : ''}
         <p style="margin:6px 0"><b>Стъпки:</b></p><ol style="margin:0;padding-left:18px">${i.steps.map((s) => `<li>${esc(s)}</li>`).join('')}</ol>
         <p style="margin:6px 0"><b>Ресурси:</b> ${i.resources.map((r) => `<a href="${esc(r.url)}">${esc(r.title)}</a>`).join(' · ')}</p>
         ${i.nextSkills.length ? `<p style="margin:6px 0"><b>След това:</b> ${i.nextSkills.map(esc).join(', ')}</p>` : ''}
@@ -39,7 +68,8 @@ export function buildResultEmail(rec, ai, publicUrl) {
   const text = [
     'Future Jobs – твоят план за бъдещите умения', '',
     ...rec.occupations.map((o) => `• ${o.title} (${o.match}%)`), '',
-    ...rec.horizons.flatMap((h) => [`== ${h.label} ==`, ...h.items.map((i) => `- ${i.name}: ${i.steps[0] || ''}`), '']),
+    ...rec.horizons.flatMap((h) => [`== ${h.label} ==`, ...h.items.flatMap((i) => [`- ${i.name}: ${i.steps[0] || ''}`,
+      ...(plans[i.skillId] ? [`  Личен план (Gemini, AI текст): ${plans[i.skillId].why}`, ...plans[i.skillId].steps.map((t, k) => `    ${STEP_WHEN[k]}: ${t}`)] : [])]), '']),
     ...rec.disclaimers, publicUrl,
   ].join('\n');
   return { subject: 'Future Jobs: твоите препоръчани умения и професии', html, text };

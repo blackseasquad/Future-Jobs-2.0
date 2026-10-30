@@ -69,6 +69,11 @@ export function getConfig() {
       apiKey: e.ANTHROPIC_API_KEY || '',
       model: e.ANTHROPIC_MODEL || 'claude-sonnet-4-5',
     },
+    // Чат асистент (Google AI Studio). Ключът е само на сървъра.
+    gemini: {
+      apiKey: (e.GEMINI_API_KEY || '').trim(),
+      models: (e.GEMINI_MODELS || '').split(',').map((x) => x.trim()).filter(Boolean),
+    },
     smtp: smtpConfig(e),
     // Данните се считат за остарели след толкова часа без успешен импорт
     staleAfterHours: Number(e.STALE_AFTER_HOURS || 36),
