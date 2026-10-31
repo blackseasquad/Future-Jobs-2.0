@@ -45,7 +45,7 @@ async function* readSse(body) {
  * Изпраща разговора към първия работещ модел и връща {model, stream}.
  * Резервният модел се избира САМО преди първия изпратен символ – иначе потребителят би видял смесен отговор.
  * @param {{apiKey:string, models?:string[], systemInstruction:string, contents:{role:'user'|'model', text:string}[],
- *          fetchImpl?:typeof fetch, log?:(m:string)=>void, timeoutMs?:number}} o
+ *          fetchImpl?:typeof fetch, log?:(m:string)=>void, timeoutMs?:number, generationConfig?:object}} o
  */
 export async function streamWithFallback(o) {
   const models = o.models?.length ? o.models : DEFAULT_MODELS;
@@ -54,7 +54,7 @@ export async function streamWithFallback(o) {
   const payload = JSON.stringify({
     systemInstruction: { parts: [{ text: o.systemInstruction }] },
     contents: o.contents.map((c) => ({ role: c.role, parts: [{ text: c.text }] })),
-    generationConfig: { temperature: 0.4, maxOutputTokens: 700 },
+    generationConfig: o.generationConfig || { temperature: 0.4, maxOutputTokens: 700 },
     safetySettings: ['HARM_CATEGORY_HARASSMENT', 'HARM_CATEGORY_HATE_SPEECH', 'HARM_CATEGORY_SEXUALLY_EXPLICIT', 'HARM_CATEGORY_DANGEROUS_CONTENT']
       .map((category) => ({ category, threshold: 'BLOCK_MEDIUM_AND_ABOVE' })),
   });

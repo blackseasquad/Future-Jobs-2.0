@@ -75,3 +75,30 @@ test('/api/assistant: без ключ 503; с ключ стриймва отго
   assert.match(sent.systemInstruction.parts[0].text, /Посока/);
   s2.close();
 });
+
+test('/api/plan: резервен личен план през сървъра (само данни от преизчисления резултат)', async () => {
+  const { fakeFetch } = await import('./helpers.js');
+  const { runRefresh } = await import('../src/pipeline.js');
+  const db = memDb();
+  await runRefresh(db, { config: testConfig(), trigger: 'manual', force: true, fetchJson: fakeFetch(), log: () => {}, politeDelayMs: 0 });
+  const ANSWERS = { afternoon: 'help', subjects: ['bio', 'social'], workwith: 'people', tech_attitude: 'less', environment: 'clinic', values: 'impact', study: 'university', english: 'good' };
+  const calls = [];
+  const json = JSON.stringify({ why: 'Обичаш да помагаш на хората.', steps: ['Тази седмица: говори с медицинска сестра', 'Запиши се като доброволец', 'Направи кратка презентация'] });
+  const srv = createApp({ db, config: testConfig({ gemini: { apiKey: 'k', models: [] } }), assistantFetch: /** @type {any} */ (fakeGemini([err(429, 'RESOURCE_EXHAUSTED'), sse(json)], calls)) });
+  await new Promise((r) => srv.listen(0, () => r(null)));
+  const base = `http://127.0.0.1:${/** @type {any} */ (srv.address()).port}`;
+  const rec = await (await fetch(`${base}/api/recommendations`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ answers: ANSWERS, ai: false }) })).json();
+  const item = rec.horizons[0].items[0];
+  const bad = await fetch(`${base}/api/plan`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ answers: ANSWERS, skillId: 'nope', horizon: 'short' }) });
+  assert.equal(bad.status, 400);
+  const r = await fetch(`${base}/api/plan`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ answers: ANSWERS, skillId: item.skillId, horizon: 'short' }) });
+  assert.equal(r.status, 200);
+  const d = await r.json();
+  assert.equal(d.plan.steps.length, 3);
+  assert.equal(d.plan.steps[0].text, 'говори с медицинска сестра');
+  assert.equal(d.model, DEFAULT_MODELS[1]);
+  const prompt = calls[1].body.contents[0].parts[0].text;
+  assert.match(prompt, new RegExp(item.name));
+  assert.equal(calls[1].body.generationConfig.responseMimeType, 'application/json');
+  srv.close();
+});

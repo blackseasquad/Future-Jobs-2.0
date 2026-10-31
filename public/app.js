@@ -2,6 +2,7 @@
 // Важно: frontend-ът НЕ обновява данните периодично – ежедневният импорт е задача на сървъра.
 
 import { personalPlan, pingGemini } from './gemini.js';
+import { answersToText } from './plan-prompt.js';
 import { mountAssistant } from './assistant.js';
 
 const $main = document.getElementById('main');
@@ -419,23 +420,27 @@ async function loadGemini(skillId, horizonKey) {
   gemState[skillId] = { status: 'loading' };
   const paint = () => { const el = document.getElementById(`gem-${skillId}`); if (el) el.innerHTML = geminiBody(skillId); };
   paint();
+  // 1) Firebase AI Logic в браузъра (App Check); 2) резервно – сървърът през Google AI Studio.
+  const errors = [];
   try {
     const { questions } = await cached('quiz', () => api('/api/quiz'));
-    const answers = questions.flatMap((q) => {
-      const a = quizState.answers[q.id];
-      const ids = Array.isArray(a) ? a : a ? [a] : [];
-      const txt = ids.map((id) => q.options.find((o) => o.id === id)?.text).filter(Boolean);
-      return txt.length ? [{ question: q.text, answer: txt.join(', ') }] : [];
-    });
     const plan = await personalPlan({
-      answers, interests: r.profile.topInterests, skill: item.name, description: item.description || '',
+      answers: answersToText(questions, quizState.answers), interests: r.profile.topInterests, skill: item.name, description: item.description || '',
       horizon: `${h.label} (${h.subtitle})`, firstStep: item.firstStep.text, fact: `${item.fact.text} (${item.fact.source}, ${item.fact.period})`,
       occupation: r.occupations[0]?.title || '',
     });
-    gemState[skillId] = { status: 'ok', plan, model: 'Gemini' };
+    gemState[skillId] = { status: 'ok', plan, model: 'Gemini (Firebase AI Logic)' };
   } catch (err) {
-    console.warn('Gemini:', err);
-    gemState[skillId] = { status: 'error', error: /app-check|appCheck|recaptcha/i.test(String(err?.message)) ? 'неуспешна защитна проверка' : /quota|429|RESOURCE_EXHAUSTED/i.test(String(err?.message)) ? 'достигнат е дневният лимит' : 'няма връзка' };
+    errors.push(`Firebase: ${String(err?.message || err)}`);
+    try {
+      const d = await api('/api/plan', { method: 'POST', body: JSON.stringify({ answers: quizState.answers, skillId, horizon: horizonKey }) });
+      gemState[skillId] = { status: 'ok', plan: d.plan, model: `${d.model} (Google AI Studio)` };
+    } catch (err2) {
+      errors.push(`Сървър: ${String(err2?.message || err2)}`);
+      console.warn('Gemini не отговори:', errors.join(' | '));
+      const all = errors.join(' ');
+      gemState[skillId] = { status: 'error', error: /quota|429|RESOURCE_EXHAUSTED|лимит/i.test(all) ? 'достигнат е дневният лимит' : /app.?check|recaptcha/i.test(all) ? 'неуспешна защитна проверка' : 'няма връзка' };
+    }
   }
   paint();
 }
@@ -643,8 +648,16 @@ $main.addEventListener('click', async (e) => {
   if (act === 'ping-gemini') {
     const out = document.getElementById('gemini-msg');
     t.setAttribute('disabled', ''); out.textContent = 'Проверка…';
-    try { const g = await pingGemini(); out.innerHTML = `✅ Gemini работи (${esc(g.model)}, App Check: ${esc(g.provider)}) за ${g.ms} ms.`; }
-    catch (err) { out.innerHTML = `<span style="color:var(--err-ink)">✕ ${esc(String(err?.message || err))}</span><br>Провери App Check: доставчикът (v3 или enterprise) във firebase-config.js трябва да съвпада с регистрирания във Firebase → Security → App Check, а домейнът – с този в reCAPTCHA.`; }
+    const lines = [];
+    try { const g = await pingGemini(); lines.push(`✅ Firebase AI Logic работи (${esc(g.model)}, App Check: ${esc(g.provider)}) за ${g.ms} ms.`); }
+    catch (err) { lines.push(`✕ Firebase AI Logic: <span style="color:var(--err-ink)">${esc(String(err?.message || err))}</span>`); }
+    try {
+      const res = await fetch('/api/assistant', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ messages: [{ role: 'user', text: 'Кажи само „OK“.' }] }) });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || `HTTP ${res.status}`);
+      lines.push(`✅ Сървърът (Google AI Studio, GEMINI_API_KEY) работи – модел ${esc(res.headers.get('x-assistant-model') || '?')}.`);
+      await res.text();
+    } catch (err) { lines.push(`✕ Сървърът (Google AI Studio): <span style="color:var(--err-ink)">${esc(String(err?.message || err))}</span>`); }
+    out.innerHTML = lines.join('<br>') + '<br><span class="muted">Личният план работи, ако поне единият път е ✅ (първо се пробва Firebase, после сървърът).</span>';
     t.removeAttribute('disabled');
     return;
   }

@@ -16,6 +16,7 @@ import { recommend, salaryFor, planFor } from './model/recommend.js';
 import { explainWithAi } from './ai.js';
 import { streamWithFallback } from './assistant/gemini.js';
 import { buildSystemInstruction } from './assistant/knowledge.js';
+import { buildPrompt, validatePlan, answersToText } from '../public/plan-prompt.js';
 import { buildResultEmail, sanitizePlans, sendSmtp, isValidEmail, hashEmail, explainSmtpError } from './email.js';
 import { runRefresh, AlreadyRunningError } from './pipeline.js';
 import { localProvider, blobProvider, loadVercelBlob, StorageConflictError } from './storage.js';
@@ -101,6 +102,7 @@ export function createHandler({ db: initialDb, provider, config, refreshImpl = r
   const emailLimit = rateLimiter(5, 3600 * 1000);
   const recLimit = rateLimiter(60, 3600 * 1000);
   const assistantLimit = rateLimiter(30, 10 * 60 * 1000);
+  const planLimit = rateLimiter(40, 10 * 60 * 1000);
 
   /** Проверява историята на чата от браузъра: само роли user/model, ограничена дължина. */
   function chatContents(body) {
@@ -302,6 +304,35 @@ export function createHandler({ db: initialDb, provider, config, refreshImpl = r
         throw new HttpError(502, 'Имейлът не можа да бъде изпратен. Опитай отново по-късно.');
       }
       return send(res, 200, { ok: true });
+    }
+    // Личен план за едно умение – резервен път, ако Firebase AI Logic в браузъра не отговори.
+    // Сървърът сам преизчислява резултата от отговорите, така че в промпта влизат само негови данни.
+    if (req.method === 'POST' && p === '/api/plan') {
+      if (!config.gemini?.apiKey) throw new HttpError(503, 'Резервният път към Gemini не е конфигуриран (липсва GEMINI_API_KEY).');
+      if (!planLimit(ip)) throw new HttpError(429, 'Твърде много заявки. Опитай след няколко минути.');
+      const body = await readJson(req);
+      let rec;
+      try { rec = recommend(db, body.answers); } catch (err) { throw new HttpError(400, err.message); }
+      const h = rec.horizons.find((x) => x.key === body.horizon);
+      const item = h?.items.find((x) => x.skillId === body.skillId);
+      if (!item) throw new HttpError(400, 'Няма такова умение в резултата');
+      const prompt = buildPrompt({
+        answers: answersToText(QUIZ, body.answers), interests: rec.profile.topInterests, skill: item.name, description: item.description || '',
+        horizon: `${h.label} (${h.subtitle})`, firstStep: item.firstStep.text, fact: `${item.fact.text} (${item.fact.source}, ${item.fact.period})`,
+        occupation: rec.occupations[0]?.title || '',
+      });
+      try {
+        const r = await streamWithFallback({ apiKey: config.gemini.apiKey, models: config.gemini.models, fetchImpl: assistantFetch,
+          systemInstruction: 'Отговаряш само с валиден JSON по зададената схема.', contents: [{ role: 'user', text: prompt }],
+          generationConfig: { temperature: 0.6, maxOutputTokens: 600, responseMimeType: 'application/json',
+            responseSchema: { type: 'OBJECT', properties: { why: { type: 'STRING' }, steps: { type: 'ARRAY', items: { type: 'STRING' } } }, required: ['why', 'steps'] } } });
+        let text = '';
+        for await (const c of r.stream) text += c;
+        return send(res, 200, { plan: validatePlan(text, prompt), model: r.model, via: 'ai-studio' });
+      } catch (err) {
+        console.warn(JSON.stringify({ event: 'plan_failed', error: String(err.message).slice(0, 300), tried: (err.errors || []).map((e) => `${e.model}:${e.status}`) }));
+        throw new HttpError(503, 'Gemini не е наличен в момента.');
+      }
     }
     // Чат асистент: прокси към Google AI Studio (Gemini) с резервни модели; ключът е само тук.
     if (req.method === 'POST' && p === '/api/assistant') {
