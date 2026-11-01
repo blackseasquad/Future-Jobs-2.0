@@ -46,6 +46,7 @@ async function getModel() {
 
 /** Връща {why, steps:[{when,text}]} или хвърля грешка. */
 export async function personalPlan(ctx) {
+  if (!FIREBASE.appCheck?.siteKey) throw new Error('App Check не е настроен (липсва reCAPTCHA Enterprise site key)');
   const prompt = buildPrompt(ctx);
   const model = await getModel();
   const result = await Promise.race([
@@ -57,6 +58,7 @@ export async function personalPlan(ctx) {
 
 /** Кратка проверка за администратора (един малък заявка към Gemini). */
 export async function pingGemini() {
+  if (!FIREBASE.appCheck?.siteKey) throw new Error('App Check не е настроен – във public/firebase-config.js липсва reCAPTCHA Enterprise site key');
   const model = await getModel();
   const t0 = performance.now();
   const r = await model.generateContent('Върни JSON {"why":"ok","steps":["a","b","c"]}');

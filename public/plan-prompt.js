@@ -9,7 +9,8 @@ export const STEP_WHEN = ['Тази седмица', 'До месец', 'Сле�
  */
 export function buildPrompt(ctx) {
   return [
-    'Ти си кариерен консултант за ученици (16–19 г.) в България. Пиши на български, на „ти“, топло и конкретно.',
+    'Ти си кариерен консултант в България за ученици, студенти и възрастни, които искат да се развиват или да сменят професията си. Пиши на български, на „ти“, топло и конкретно.',
+    'Съобрази стъпките с положението на човека от отговора на „Къде си сега?“ (училище, университет или работа).',
     'Задача: кратък личен план за едно умение. Върни JSON с полета:',
     '- "why": ЕДНО изречение (до 30 думи) защо това умение пасва точно на този ученик – свържи го с негов конкретен отговор от анкетата.',
     `- "steps": точно 3 кратки, изпълними стъпки (до 20 думи всяка) в този ред: ${STEP_WHEN.join(', ')}. Първата може да надгради дадената първа стъпка.`,
@@ -52,4 +53,15 @@ export function answersToText(questions, answers) {
     const txt = ids.map((id) => q.options.find((o) => o.id === id)?.text).filter(Boolean);
     return txt.length ? [{ question: q.text, answer: txt.join(', ') }] : [];
   });
+}
+
+/** Въпросите, които вижда човек според отговора на „Къде си сега?“ (същата логика като quizFor на сървъра). */
+export function questionsFor(questions, situation, adultSituations = ['working', 'changing']) {
+  const adult = adultSituations.includes(String(situation));
+  const student = situation === 'student';
+  return questions.filter((q) => !q.audience || q.audience === (adult ? 'adult' : 'young')).map((q) => ({
+    ...q,
+    text: (adult && q.adultText) || (student && q.studentText) || q.text,
+    options: q.options.map((o) => ({ ...o, text: (adult && o.adultText) || (student && o.studentText) || o.text })),
+  }));
 }

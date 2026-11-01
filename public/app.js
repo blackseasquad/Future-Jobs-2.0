@@ -2,7 +2,7 @@
 // Важно: frontend-ът НЕ обновява данните периодично – ежедневният импорт е задача на сървъра.
 
 import { personalPlan, pingGemini } from './gemini.js';
-import { answersToText } from './plan-prompt.js';
+import { answersToText, questionsFor } from './plan-prompt.js';
 import { mountAssistant } from './assistant.js';
 
 const $main = document.getElementById('main');
@@ -154,10 +154,10 @@ async function pageHome() {
   <section class="hero"><div class="wrap">
     <div class="hero-copy">
       <span class="eb">Твоето бъдеще започва тук</span>
-      <h1>Открий своята <span>посока!</span></h1>
+      <h1><span class="nw">Открий своята</span><br><span>посока!</span></h1>
       <p class="lead">Какво да учиш днес, за да имаш работа утре? Future Jobs проверява всеки ден пазара на труда и ти казва кои умения да развиваш още сега.</p>
       <div class="hero-cta"><a class="btn btn-lg" href="#/quiz">Открий своя път <span aria-hidden="true">↗</span></a><a class="link" href="#/occupations">Разгледай професиите →</a></div>
-      <div class="hero-points"><span>✦ За ученици и млади хора</span><span>✦ Данни и прогнози</span><span>✦ Обновява се всеки ден</span></div>
+      <div class="hero-points"><span>✦ За ученици, студенти и работещи</span><span>✦ Данни и прогнози</span><span>✦ Обновява се всеки ден</span></div>
     </div>
     <div class="hero-art">
       <div class="ring r1"></div><div class="ring r2"></div>
@@ -192,12 +192,22 @@ const INTEREST_FILTERS = ['Технологии', 'Данни и анализ', 
 const FILTER_SHORT = { 'Творчество и дизайн': 'Творчество', 'Природа и устойчивост': 'Природа', 'Бизнес и организация': 'Бизнес', 'Практическа/техническа работа': 'Практическа работа' };
 let occFilter = null;
 
-async function pageOccupations() {
+const OCC_LEAD = 'Днешните професии с перспектива и такива, които се очаква да се появят до 10 години.';
+async function occTabs(on) {
+  const [{ occupations }, fut] = await Promise.all([cached('occ', () => api('/api/occupations')), cached('future', () => api('/api/future'))]);
+  const t = [['today', 'Търсени днес', occupations.length, '#/occupations'], ['future', '✦ Професии на бъдещето', fut.future.length, '#/occupations/future'], ['changing', 'Професии, които ИИ променя', fut.changing.length, '#/occupations/changing']];
+  return `<nav class="tabs" aria-label="Видове професии">${t.map(([k, label, n, href]) => `<a class="tab${k === on ? ' on' : ''}" href="${href}"${k === on ? ' aria-current="page"' : ''}>${label}<span class="n">${n}</span></a>`).join('')}</nav>`;
+}
+
+async function pageOccupations(tab) {
+  if (tab === 'future') return pageFutureList();
+  if (tab === 'changing') return pageChanging();
   const { occupations } = await cached('occ', () => api('/api/occupations'));
   const list = occFilter ? occupations.filter((o) => o.interests.includes(occFilter)) : occupations;
   return `
   <section class="sec top"><div class="wrap stack">
-    ${pageHead({ eyebrow: 'Разгледай възможностите', title: 'Професии за твоето бъдеще.', lead: 'Разгледай каталога и открий какво ти е интересно.' })}
+    ${pageHead({ eyebrow: 'Разгледай възможностите', title: 'Професии за твоето бъдеще.', lead: OCC_LEAD })}
+    ${await occTabs('today')}
     <input class="search" type="search" data-search="occ" value="${esc(queries.occ)}" placeholder="⌕  Потърси професия" aria-label="Потърси професия">
     ${acc('Филтри по интереси', `<div class="chips" role="group" aria-label="Филтър по интереси">
       <button class="chip" data-filter="" aria-pressed="${!occFilter}">Всички</button>
@@ -216,6 +226,72 @@ function occCard(o) {
     <span class="card-desc">${esc(o.description)}</span>
     <span class="more">Разгледай професията ↗</span>
   </a>`;
+}
+
+const EVIDENCE = { strong: ['Силни доказателства', 'ev-s', 'закон или регламент с конкретни дати'], medium: ['Средни доказателства', 'ev-m', 'доклади и тенденции'] };
+const futureCard = (f) => `<a class="card fcard" href="#/future/${f.id}">
+    <span class="fut">✦ Бъдеща професия · около ${esc(f.expected)}</span>
+    <span class="card-title">${esc(f.title)}</span>
+    <span class="card-desc">${esc(f.description)}</span>
+    <span><span class="fchip">${esc(f.driver)}</span></span>
+    <span class="more fut-more">Разгледай ↗</span>
+  </a>`;
+
+async function pageFutureList() {
+  const { future } = await cached('future', () => api('/api/future'));
+  return `
+  <section class="sec top"><div class="wrap stack">
+    ${pageHead({ eyebrow: 'Разгледай възможностите', title: 'Професии за твоето бъдеще.', lead: OCC_LEAD })}
+    ${await occTabs('future')}
+    <div class="callout fut-note"><span class="badge b-forecast">Прогноза</span><span class="small">Тези професии още почти не съществуват. Показваме защо се очакват и кои умения им трябват – без заплати и обяви, защото за тях още няма данни.</span></div>
+    <div class="grid g4">${future.map(futureCard).join('')}</div>
+  </div></section>`;
+}
+
+async function pageChanging() {
+  const { changing, changingSource } = await cached('future', () => api('/api/future'));
+  return `
+  <section class="sec top"><div class="wrap stack">
+    ${pageHead({ eyebrow: 'Разгледай възможностите', title: 'Професии за твоето бъдеще.', lead: OCC_LEAD })}
+    ${await occTabs('changing')}
+    <div class="callout chg-note"><span class="badge b-forecast">Прогноза · WEF</span><span class="small">Най-бързо намаляващите професии до 2030 г. според ${esc(changingSource.title)} (световно, % промяна). За всяка – близка професия днес, бъдеща професия и 2 умения за прехода. ${esc(changingSource.note.split('. ')[1] || '')}</span></div>
+    <div class="grid g3">${changing.map(changingCard).join('')}</div>
+    <p class="small muted">Източник: <a href="${esc(changingSource.url)}" target="_blank" rel="noopener">${esc(changingSource.title)}</a>, ${esc(changingSource.period)}.</p>
+  </div></section>`;
+}
+
+function changingCard(j) {
+  return `<div class="card chg">
+    <div class="chg-top"><span class="card-title" style="font-size:17px">${esc(j.title)}</span><span class="dl">${j.change}%</span></div>
+    <div class="chg-path">
+      <span class="kick">Днес →</span>${j.today ? `<a href="#/occupation/${j.today.id}">${esc(j.today.title)}</a>` : '—'}
+      <span class="fut">✦ Бъдеще →</span>${j.future ? `<a class="fut-link" href="#/future/${j.future.id}">${esc(j.future.title)}</a>` : '—'}
+    </div>
+    <div class="chips">${j.skills.map((x) => `<a class="chip sm" href="#/skill/${x.id}">${esc(x.name)}</a>`).join('')}</div>
+  </div>`;
+}
+
+async function pageFuture(id) {
+  const f = await api(`/api/future/${encodeURIComponent(id)}`);
+  const ev = EVIDENCE[f.evidence] || EVIDENCE.medium;
+  const chips = (xs, alt = '') => `<div class="chips">${xs.map((x) => `<a class="chip ${alt}" href="#/skill/${x.id}">${esc(x.name)}</a>`).join('')}</div>`;
+  return `
+  <section class="sec top"><div class="wrap stack">
+    ${pageHead({ back: backLink('#/occupations/future', 'Професии на бъдещето'), eyebrow: '✦ Бъдеща професия', title: esc(f.title), lead: esc(f.description) })}
+    <div class="kpis">
+      ${kpi('Кога се очаква', esc(f.expected), 'ориентировъчно')}
+      ${kpi('Какво я създава', esc(f.driver), '')}
+      ${kpi('Най-близка професия днес', f.closestToday ? `<a href="#/occupation/${f.closestToday.id}" class="kpi-link">${esc(f.closestToday.title)}</a>` : '—', 'оттук минава пътят')}
+    </div>
+    <div class="callout fut-note"><span class="badge ${ev[1]}">${ev[0]}</span><span class="small">Прогноза – ${ev[2]}. Заплата и брой обяви още няма.</span></div>
+    <div class="acc-list">
+      ${acc('Умения, които ще ѝ трябват', `<b class="small">Основни</b>${chips(f.coreSkills)}<b class="small">Допълващи</b>${chips(f.complementarySkills, 'alt')}`, { open: true })}
+      ${acc('Път дотам от днес', `<ol class="path">${f.path.map((x) => `<li>${esc(x)}</li>`).join('')}</ol>`)}
+      ${acc('Защо ще се появи', f.why.map((w) => `<p>${kindBadge(w.kind)} ${esc(w.text)}</p>`).join('') + (f.fromChanging.length ? `<p class="small">Подходяща посока и за хора от: ${f.fromChanging.map((c) => `${esc(c.title)} (${c.change}%)`).join(', ')}.</p>` : ''))}
+      ${acc('Източници', `<ul class="ev">${f.why.map((w) => `<li><span><a href="${esc(w.url)}" target="_blank" rel="noopener">${esc(w.source)}</a></span></li>`).join('')}</ul>`)}
+      ${acc('Колко сме сигурни', `<p><span class="badge ev-s">Силни</span> – закон или регламент с конкретни дати. <span class="badge ev-m">Средни</span> – доклади и тенденции. Тази професия: <b>${ev[0].toLowerCase()}</b>.</p>${f.note ? `<p>${esc(f.note)}</p>` : '<p>Названието в обявите може да е различно.</p>'}`)}
+    </div>
+  </div></section>`;
 }
 
 function signalsList(signals) {
@@ -252,6 +328,7 @@ async function pageOccupation(id) {
         <p class="small muted">${esc(sal.note)}</p>` : NA('Данните за заплатите още не са импортирани.'))}
       ${acc('Заетост в професионалната група', `${emp.BG ? lineChart([emp.BG.series], { names: ['България'] }) : NA()}
         <span class="small muted">${kindBadge('fact')} ${emp.BG ? `${esc(emp.BG.from)}–${esc(emp.BG.to)} · ` : ''}хил. заети в групата „${esc(o.iscoLabel)}“ · ${esc(emp.source)}${emp.BG?.breaks ? ' · има прекъсване на редицата (методологична промяна)' : ''}</span>`)}
+      ${o.futureFrom?.length ? acc('✦ Бъдещи професии оттук', `<div class="chips">${o.futureFrom.map((f) => `<a class="chip fchip-l" href="#/future/${f.id}">${esc(f.title)} · ~${esc(f.expected)}</a>`).join('')}</div><p class="small muted">Професии, които се очаква да се появят и за които тази е най-близката днес.</p>`) : ''}
       ${acc('Данни от ESCO', o.esco ? `<p class="small">${kindBadge('fact')} Съществени умения по ESCO за <a href="${esc(o.esco.uri)}" rel="noopener" target="_blank">„${esc(o.esco.label_bg)}“</a>${o.esco.code ? `, код ${esc(o.esco.code)}` : ''}:</p>
         <div class="chips">${ess.slice(0, 20).map((s) => `<span class="chip alt sm">${esc(s.to_label)}</span>`).join('') || NA()}</div>` : NA('ESCO данните още не са импортирани.'))}
     </div>
@@ -336,7 +413,8 @@ async function pageSkill(id) {
     ${kpis}
     ${st ? `<div class="callout"><span class="ico" aria-hidden="true">→</span><div style="display:flex;flex-direction:column;gap:4px"><span class="kick">Първа стъпка · ${esc(st.label || '')}</span><span class="t">${st.url ? `<a href="${esc(st.url)}" target="_blank" rel="noopener">${esc(st.text)}</a>` : esc(st.text)}</span></div></div>` : ''}
     <div class="acc-list">
-      ${acc('Свързани професии', `<div class="chips">${s.occupations.map((o) => `<a class="chip ${o.core ? '' : 'alt'}" href="#/occupation/${o.id}">${esc(o.title)}</a>`).join('') || NA()}</div>`)}
+      ${acc('Свързани професии', `<div class="chips">${s.occupations.map((o) => `<a class="chip ${o.core ? '' : 'alt'}" href="#/occupation/${o.id}">${esc(o.title)}</a>`).join('') || NA()}</div>
+        ${s.futureOccupations?.length ? `<b class="small">✦ Нужно и за бъдещи професии</b><div class="chips">${s.futureOccupations.map((f) => `<a class="chip fchip-l" href="#/future/${f.id}">${esc(f.title)} · ~${esc(f.expected)}</a>`).join('')}</div>` : ''}`, { hint: s.futureOccupations?.length ? `✦ ${s.futureOccupations.length} бъдещи` : '' })}
       ${acc('Къде да науча това умение?', `<ul class="ev">${s.resources.map((r) => `<li><span class="badge ${r.free ? 'b-fact' : 'b-off'}">${r.free ? 'безплатно' : 'платено'}</span><span><a href="${esc(r.url)}" rel="noopener" target="_blank">${esc(r.title)}</a><span class="src">${esc(r.provider)} · ${esc(r.lang)}</span></span></li>`).join('')}</ul>`)}
       ${acc('Търсене и перспектива', `
         <div class="bars">${Object.keys(LBL).map((k) => `<div class="bar"><span>${LBL[k]}</span><div class="meter"><i style="width:${comp[k] ?? 0}%"></i></div><b>${comp[k] ?? '—'}</b></div>`).join('')}</div>
@@ -365,10 +443,22 @@ async function pageSkill(id) {
 // ------------------------------------------------------------------ анкета
 const quizState = { step: 0, answers: {}, result: null, error: null, total: 8 };
 
+/** Въпросите според отговора на „Къде си сега?“ (9 за ученици/студенти, 10 за работещи). */
+async function visibleQuestions() {
+  const quiz = await cached('quiz', () => api('/api/quiz'));
+  return questionsFor(quiz.questions, quizState.answers.situation || 'pupil', quiz.adultSituations);
+}
+/** Само отговорите на видимите въпроси (ако човек смени въпрос 1, старите отговори не се изпращат). */
+async function visibleAnswers() {
+  const qs = await visibleQuestions();
+  return Object.fromEntries(qs.filter((q) => quizState.answers[q.id] !== undefined).map((q) => [q.id, quizState.answers[q.id]]));
+}
+
 async function pageQuiz() {
-  const { questions } = await cached('quiz', () => api('/api/quiz'));
+  const questions = await visibleQuestions();
   quizState.total = questions.length;
   if (quizState.result) return renderResult(quizState.result);
+  if (quizState.step >= questions.length) quizState.step = questions.length - 1;
   const q = questions[quizState.step];
   const sel = quizState.answers[q.id];
   const isSel = (id) => (Array.isArray(sel) ? sel.includes(id) : sel === id);
@@ -379,8 +469,9 @@ async function pageQuiz() {
     <div><div class="quiz-meta"><span>Въпрос ${quizState.step + 1} от ${questions.length}</span><span>~${left} мин. остава</span></div>
     <div class="progress"><i style="width:${((quizState.step + 1) / questions.length) * 100}%"></i></div></div>
     <h1>${esc(q.text)}</h1>
+    ${q.hint ? `<p class="small muted" style="margin-top:-10px">${esc(q.hint)}</p>` : ''}
     ${q.type === 'multi' ? `<p class="small muted" style="margin-top:-10px">Избери до ${q.max || 1}.</p>` : ''}
-    <div class="options" role="group" aria-label="Отговори">${q.options.map((o) => `<button class="opt${q.type === 'multi' ? ' multi' : ''}" data-opt="${o.id}" data-q="${q.id}" data-type="${q.type}" data-max="${q.max || 1}" aria-pressed="${isSel(o.id)}"><span class="tick"></span>${esc(o.text)}</button>`).join('')}</div>
+    <div class="options" role="group" aria-label="Отговори">${q.options.map((o) => `<button class="opt${q.type === 'multi' ? ' multi' : ''}" data-opt="${o.id}" data-q="${q.id}" data-type="${q.type}" data-max="${q.max || 1}" aria-pressed="${isSel(o.id)}"><span class="tick"></span><span>${esc(o.text)}${o.note ? `<small>${esc(o.note)}</small>` : ''}</span></button>`).join('')}</div>
     ${quizState.error ? `<p class="notice err">${esc(quizState.error)}</p>` : ''}
     <div class="quiz-nav">
       <button class="btn btn-ghost" data-act="back" ${quizState.step === 0 ? 'disabled' : ''}>← Назад</button>
@@ -423,9 +514,8 @@ async function loadGemini(skillId, horizonKey) {
   // 1) Firebase AI Logic в браузъра (App Check); 2) резервно – сървърът през Google AI Studio.
   const errors = [];
   try {
-    const { questions } = await cached('quiz', () => api('/api/quiz'));
     const plan = await personalPlan({
-      answers: answersToText(questions, quizState.answers), interests: r.profile.topInterests, skill: item.name, description: item.description || '',
+      answers: answersToText(await visibleQuestions(), quizState.answers), interests: r.profile.topInterests, skill: item.name, description: item.description || '',
       horizon: `${h.label} (${h.subtitle})`, firstStep: item.firstStep.text, fact: `${item.fact.text} (${item.fact.source}, ${item.fact.period})`,
       occupation: r.occupations[0]?.title || '',
     });
@@ -451,7 +541,7 @@ function renderResult(r) {
   return `
   <section class="sec top"><div class="wrap stack" style="gap:20px">
     ${pageHead({ eyebrow: 'Твоят резултат', title: 'Твоят план за бъдещите умения', lead: `Какво да учиш днес – и кога. По интересите ти: <b style="color:var(--ink)">${esc(r.profile.topInterests.join(', '))}</b>` })}
-    <span class="gem-chip">✦ Личните планове пише Gemini по твоите отговори</span>
+    <span class="gem-chip">✦ GEMINI пише твоя личен план по твоите отговори</span>
     ${!r.dataAsOf ? '<p class="notice">Все още няма импортирани данни от пазара на труда – препоръките се основават само на публикуваните прогнози и каталога.</p>' : ''}
     ${r.knownSkills?.length ? `<p class="small muted">Вече владееш: ${esc(r.knownSkills.join(', '))} – не е включено в плана.</p>` : ''}
     <div class="hz-grid">${r.horizons.map((h) => `<div class="hz ${h.key}">
@@ -474,10 +564,22 @@ function renderResult(r) {
       <ul class="disclaimers">${r.disclaimers.map((d) => `<li>${esc(d)}</li>`).join('')}</ul>`)}
     <div class="stack" style="gap:10px;margin-top:6px">
       <h2 class="h2" style="font-size:22px">Къде могат да те отведат тези умения</h2>
-      ${top ? `<a class="card occ-row" href="#/occupation/${top.id}">
-        <div style="display:flex;flex-direction:column;gap:4px;max-width:760px"><span class="kick">Най-добро съвпадение</span><span class="card-title">${esc(top.title)}</span><span class="card-desc" style="font-size:14px">${esc(top.description || '')}</span></div>
-        <span class="more">Разгледай професията ↗</span></a>` : ''}
-      ${others.length ? acc(`Още ${others.length} подходящи професии`, `<div class="chips">${others.map((o) => `<a class="chip" href="#/occupation/${o.id}">${esc(o.title)}</a>`).join('')}</div>
+      <div class="grid g2">
+        ${top ? `<a class="card" href="#/occupation/${top.id}">
+          <span class="kick">Днес · най-добро съвпадение</span><span class="card-title">${esc(top.title)}</span><span class="card-desc" style="font-size:14px">${esc(top.description || '')}</span>
+          <span class="more">Разгледай професията ↗</span></a>` : ''}
+        ${r.futureOccupations?.[0] ? (() => { const f = r.futureOccupations[0]; return `<a class="card fcard" href="#/future/${f.id}">
+          <span class="fut">✦ В бъдеще · около ${esc(f.expected)}</span><span class="card-title">${esc(f.title)}</span>
+          <span class="card-desc" style="font-size:14px">${esc(f.description)}${f.sharedSkills?.length ? ` Общо с плана ти: ${esc(f.sharedSkills.join(', '))}.` : ''}</span>
+          <span class="more fut-more">Разгледай бъдещата професия ↗</span></a>`; })() : ''}
+      </div>
+      ${r.transitions?.length ? `<div class="card trans">
+        <span class="kick">Твоят преход · според сферата, в която работиш</span>
+        ${r.transitions.map((j) => `<div class="trans-row"><span><b>${esc(j.title)}</b> <span class="dl">${j.change}% до 2030 (WEF)</span></span>
+          <span class="small">→ днес: ${j.today ? `<a href="#/occupation/${j.today.id}">${esc(j.today.title)}</a>` : '—'} · ✦ бъдеще: ${j.future ? `<a class="fut-link" href="#/future/${j.future.id}">${esc(j.future.title)}</a>` : '—'}</span></div>`).join('')}
+        <a class="small" href="#/occupations/changing" style="font-weight:700">Всички професии, които ИИ променя →</a>
+      </div>` : ''}
+      ${others.length ? acc(`Още ${others.length} подходящи професии днес`, `<div class="chips">${others.map((o) => `<a class="chip" href="#/occupation/${o.id}">${esc(o.title)}</a>`).join('')}</div>
         <p class="small">Съвпадение с интересите: ${r.occupations.map((o) => `${esc(o.title)} ${o.match}%`).join(' · ')} ${kindBadge('model')}</p>`) : ''}
     </div>
     <div class="card mail-card">
@@ -581,7 +683,8 @@ async function pageData() {
 // ------------------------------------------------------------------ рутер
 const routes = [
   [/^#?\/?$/, 'home', pageHome],
-  [/^#\/occupations$/, 'occupations', pageOccupations],
+  [/^#\/occupations(?:\/(future|changing))?$/, 'occupations', pageOccupations],
+  [/^#\/future\/([a-z_]+)$/, 'occupations', pageFuture],
   [/^#\/occupation\/([a-z_]+)$/, 'occupations', pageOccupation],
   [/^#\/skills$/, 'skills', pageSkills],
   [/^#\/skill\/([a-z_]+)$/, 'skills', pageSkill],
@@ -664,7 +767,7 @@ $main.addEventListener('click', async (e) => {
   if (act === 'submit') {
     t.setAttribute('disabled', ''); t.textContent = 'Изчисляване…';
     Object.keys(gemState).forEach((k) => delete gemState[k]);
-    try { quizState.result = await api('/api/recommendations', { method: 'POST', body: JSON.stringify({ answers: quizState.answers }) }); quizState.error = null; }
+    try { quizState.answers = await visibleAnswers(); quizState.result = await api('/api/recommendations', { method: 'POST', body: JSON.stringify({ answers: quizState.answers }) }); quizState.error = null; }
     catch (err) { quizState.error = err.message; }
     return render();
   }

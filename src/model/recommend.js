@@ -8,6 +8,8 @@ import { latestSkillMetrics, occupationOutlook } from './scoring.js';
 import { WEF_2025, CEDEFOP_BG_2025 } from '../catalog/published.js';
 import { getMeta } from '../db.js';
 import { PROJECTS, GROUPS, STEP_LABELS } from '../catalog/first-steps.js';
+import { FUTURE_OCCUPATIONS, FUTURE_BY_ID, CHANGING_JOBS } from '../catalog/future.js';
+import { OCCUPATION_BY_ID } from '../catalog/occupations.js';
 
 const TECH_WEF = ['ai_big_data', 'networks_cyber', 'tech_literacy'];
 
@@ -230,6 +232,20 @@ export function recommend(db, answers) {
     };
   };
 
+  // 3) Бъдеща професия: близост на интересите + общи умения с плана
+  const planSkills = new Set(horizons.flatMap((h) => h.items.map((c) => c.id)));
+  const future = FUTURE_OCCUPATIONS.map((f) => {
+    const sim = cosine(profile.vector, f.interests);
+    const all = [...f.coreSkills, ...f.complementarySkills];
+    const overlap = all.filter((x) => planSkills.has(x)).length / all.length;
+    return { f, sim, score: 0.7 * sim + 0.3 * overlap, shared: all.filter((x) => planSkills.has(x)) };
+  }).sort((a, b) => b.score - a.score).slice(0, 2);
+
+  // 4) Преход за работещите: професиите от тяхната сфера, които WEF очаква да намаляват
+  const transitions = profile.settings.field
+    ? CHANGING_JOBS.filter((j) => j.field === profile.settings.field).map((j) => changingSummary(j))
+    : [];
+
   return {
     generatedAt: new Date().toISOString(),
     dataAsOf: lastImport,
@@ -250,11 +266,36 @@ export function recommend(db, answers) {
       }
       return { key: h.key, label: h.label, subtitle: h.subtitle, items };
     }),
+    futureOccupations: future.map(({ f, sim, shared }) => ({ ...futureSummary(f), match: Math.round(sim * 100), sharedSkills: shared.map((x) => SKILL_BY_ID.get(x)?.name) })),
+    transitions,
     knownSkills: [...known].map((id) => SKILL_BY_ID.get(id)?.name),
     disclaimers: [
       'Future Skills Score и индексът на перспективата са собствен модел на Future Jobs – не са научно доказана прогноза.',
       'Фактическите данни (Eurostat, ESCO, обяви) и публикуваните прогнози (Cedefop, WEF) са означени отделно от изчисленията на модела.',
       'Съответствието с професиите се базира на отговорите в анкетата и е ориентир, а не професионално кариерно консултиране.',
     ],
+  };
+}
+
+/** Кратко описание на бъдеща професия за API-то. */
+export function futureSummary(f) {
+  const closest = OCCUPATION_BY_ID.get(f.closestToday);
+  return {
+    id: f.id, title: f.title, description: f.description, expected: f.expected, driver: f.driver, evidence: f.evidence, stage: 'emerging',
+    closestToday: closest ? { id: closest.id, title: closest.title } : null,
+    coreSkills: f.coreSkills.map((id) => ({ id, name: SKILL_BY_ID.get(id)?.name })),
+    complementarySkills: f.complementarySkills.map((id) => ({ id, name: SKILL_BY_ID.get(id)?.name })),
+  };
+}
+
+/** Професия, която ИИ променя, с пътека за преход. */
+export function changingSummary(j) {
+  const t = OCCUPATION_BY_ID.get(j.todayId);
+  const f = FUTURE_BY_ID.get(j.futureId);
+  return {
+    id: j.id, title: j.title, change: j.change, field: j.field,
+    today: t ? { id: t.id, title: t.title } : null,
+    future: f ? { id: f.id, title: f.title, expected: f.expected } : null,
+    skills: j.skills.map((id) => ({ id, name: SKILL_BY_ID.get(id)?.name })),
   };
 }

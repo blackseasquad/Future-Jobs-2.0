@@ -10,9 +10,10 @@ import { SOURCE_META, syncSources } from './sources/index.js';
 import { SKILLS, SKILL_BY_ID } from './catalog/skills.js';
 import { OCCUPATIONS, OCCUPATION_BY_ID, ISCO_MAJOR_LABELS } from './catalog/occupations.js';
 import { WEF_2025, CEDEFOP_BG_2025 } from './catalog/published.js';
-import { QUIZ, INTERESTS } from './catalog/quiz.js';
+import { QUIZ, INTERESTS, ADULT_SITUATIONS, quizFor } from './catalog/quiz.js';
 import { latestSkillMetrics, skillHistory, occupationOutlook, employmentTrend, WEIGHTS, MODEL_VERSION, MIN_POSTINGS } from './model/scoring.js';
-import { recommend, salaryFor, planFor } from './model/recommend.js';
+import { recommend, salaryFor, planFor, futureSummary, changingSummary } from './model/recommend.js';
+import { FUTURE_OCCUPATIONS, FUTURE_BY_ID, CHANGING_JOBS, CHANGING_SOURCE } from './catalog/future.js';
 import { explainWithAi } from './ai.js';
 import { streamWithFallback } from './assistant/gemini.js';
 import { buildSystemInstruction } from './assistant/knowledge.js';
@@ -122,6 +123,7 @@ export function createHandler({ db: initialDb, provider, config, refreshImpl = r
       status: last ? `Последно успешно обновяване на данните: ${new Date(last).toLocaleString('bg-BG', { timeZone: 'Europe/Sofia' })} (българско време). Днес е ${new Date().toLocaleDateString('bg-BG', { timeZone: 'Europe/Sofia' })}.` : 'Все още няма успешно обновяване на данните.',
       occupations: OCCUPATIONS.map((o) => ({ id: o.id, title: o.title })),
       skills: SKILLS.map((x) => ({ id: x.id, name: x.name })),
+      future: FUTURE_OCCUPATIONS.map((f) => ({ id: f.id, title: f.title, expected: f.expected, driver: f.driver })),
     };
   }
   let backgroundRun = null;
@@ -223,7 +225,26 @@ export function createHandler({ db: initialDb, provider, config, refreshImpl = r
     const ip = String(req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').split(',')[0].trim();
 
     if (req.method === 'GET' && p === '/api/status') return send(res, 200, statusPayload());
-    if (req.method === 'GET' && p === '/api/quiz') return send(res, 200, { questions: QUIZ.map((q) => ({ id: q.id, type: q.type, max: q.max, text: q.text, options: q.options.map((o) => ({ id: o.id, text: o.text })) })) });
+    if (req.method === 'GET' && p === '/api/quiz') {
+      return send(res, 200, { adultSituations: ADULT_SITUATIONS, questions: QUIZ.map((q) => ({
+        id: q.id, type: q.type, max: q.max, text: q.text, adultText: q.adultText, studentText: q.studentText, audience: q.audience, optional: q.optional, hint: q.hint,
+        options: q.options.map((o) => ({ id: o.id, text: o.text, adultText: o.adultText, studentText: o.studentText, note: o.note })),
+      })) });
+    }
+    if (req.method === 'GET' && p === '/api/future') {
+      return send(res, 200, { future: FUTURE_OCCUPATIONS.map(futureSummary), changing: CHANGING_JOBS.map(changingSummary), changingSource: CHANGING_SOURCE });
+    }
+    const fm = p.match(/^\/api\/future\/([a-z_]+)$/);
+    if (req.method === 'GET' && fm) {
+      const f = FUTURE_BY_ID.get(fm[1]);
+      if (!f) throw new HttpError(404, 'Няма такава бъдеща професия');
+      const m = latestSkillMetrics(db);
+      return send(res, 200, {
+        ...futureSummary(f), path: f.path, why: f.why, note: f.note || null,
+        skillTrends: [...f.coreSkills, ...f.complementarySkills].map((id) => ({ id, name: SKILL_BY_ID.get(id)?.name, score: m.get(id)?.score ?? null })),
+        fromChanging: CHANGING_JOBS.filter((j) => j.futureId === f.id).map((j) => ({ id: j.id, title: j.title, change: j.change })),
+      });
+    }
 
     if (req.method === 'GET' && p === '/api/skills') {
       const m = latestSkillMetrics(db);
@@ -239,6 +260,7 @@ export function createHandler({ db: initialDb, provider, config, refreshImpl = r
         details: m?.details ? { ...m.details, cooccurrence: (m.details.cooccurrence || []).map((c) => ({ ...c, name: SKILL_BY_ID.get(c.skill)?.name || c.skill })) } : null,
         history: skillHistory(db, s.id), esco: escoFor('skill', s.id),
         occupations: OCCUPATIONS.filter((o) => o.coreSkills.includes(s.id) || o.complementarySkills.includes(s.id)).map((o) => ({ id: o.id, title: o.title, core: o.coreSkills.includes(s.id) })),
+        futureOccupations: FUTURE_OCCUPATIONS.filter((f) => f.coreSkills.includes(s.id) || f.complementarySkills.includes(s.id)).map((f) => ({ id: f.id, title: f.title, expected: f.expected })),
       });
     }
     if (req.method === 'GET' && p === '/api/occupations') return send(res, 200, { occupations: OCCUPATIONS.map(occSummary) });
@@ -252,6 +274,7 @@ export function createHandler({ db: initialDb, provider, config, refreshImpl = r
         ...occSummary(o),
         employment: { BG: employmentTrend(db, o.isco, 'BG'), EU: employmentTrend(db, o.isco, 'EU27_2020'), source: 'Eurostat lfsa_egais', unit: 'хил. заети' },
         escoSkills: escoRel,
+        futureFrom: FUTURE_OCCUPATIONS.filter((f) => f.closestToday === o.id).map((f) => ({ id: f.id, title: f.title, expected: f.expected })),
       });
     }
     if (req.method === 'GET' && p === '/api/market') {
@@ -317,7 +340,7 @@ export function createHandler({ db: initialDb, provider, config, refreshImpl = r
       const item = h?.items.find((x) => x.skillId === body.skillId);
       if (!item) throw new HttpError(400, 'Няма такова умение в резултата');
       const prompt = buildPrompt({
-        answers: answersToText(QUIZ, body.answers), interests: rec.profile.topInterests, skill: item.name, description: item.description || '',
+        answers: answersToText(quizFor(body.answers?.situation || 'pupil'), body.answers), interests: rec.profile.topInterests, skill: item.name, description: item.description || '',
         horizon: `${h.label} (${h.subtitle})`, firstStep: item.firstStep.text, fact: `${item.fact.text} (${item.fact.source}, ${item.fact.period})`,
         occupation: rec.occupations[0]?.title || '',
       });

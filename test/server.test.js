@@ -62,7 +62,7 @@ test('API: статус, умения, професии, пазар, анкет�
   assert.equal(s.stale, false);
   assert.ok(s.runs.length >= 2);
   const skills = await (await fetch(`${base}/api/skills`)).json();
-  assert.equal(skills.skills.length, 28);
+  assert.equal(skills.skills.length, 29);
   const one = await (await fetch(`${base}/api/skills/python`)).json();
   assert.ok(one.history.length >= 1);
   const occ = await (await fetch(`${base}/api/occupations/nurse`)).json();
@@ -71,7 +71,7 @@ test('API: статус, умения, професии, пазар, анкет�
   const market = await (await fetch(`${base}/api/market`)).json();
   assert.ok(market.vacancyRate.BG.length > 0);
   const quiz = await (await fetch(`${base}/api/quiz`)).json();
-  assert.equal(quiz.questions.length, 8);
+  assert.equal(quiz.questions.length, 10, 'всички варианти; ученик вижда 9, възрастен – 10');
 });
 
 test('препоръки и изпращане на имейл (без запис на адреса)', async () => {

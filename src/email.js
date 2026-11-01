@@ -42,6 +42,8 @@ export function buildResultEmail(rec, ai, publicUrl, plans = {}) {
     (outlookPhrase(o.outlook) ? `, ${outlookPhrase(o.outlook)}` : '') +
     (o.salary?.bg ? `<br><small>Средна брутна заплата в България: ≈ ${o.salary.bg.monthly.toLocaleString('bg-BG')} EUR/мес. – „${esc(o.salary.group)}“${o.salary.sector ? ` в „${esc(o.salary.sector)}“` : ''} (${o.salary.bg.isEstimate ? `оценка за ${esc(o.salary.bg.period)}` : `Eurostat SES ${esc(o.salary.bg.period)}`})</small>` : '') +
     '</li>').join('');
+  const fut = (rec.futureOccupations || []).slice(0, 1).map((f) => `<p><b>✦ В бъдеще (прогноза, около ${esc(f.expected)}):</b> ${esc(f.title)} – ${esc(f.description)} <small>(двигател: ${esc(f.driver)})</small></p>`).join('');
+  const trans = (rec.transitions || []).map((j) => `<li>${esc(j.title)} (${j.change}% до 2030, WEF) → днес: ${esc(j.today?.title || '—')}; в бъдеще: ${esc(j.future?.title || '—')}</li>`).join('');
   const hz = rec.horizons.map((h) => `
     <h3 style="color:#0b2554;margin:24px 0 4px">${esc(h.label)}</h3><p style="margin:0 0 8px;color:#555">${esc(h.subtitle)}</p>
     ${ai?.ok && ai.texts[h.key] ? `<p style="background:#eef7fd;padding:8px 12px;border-radius:6px"><small><b>AI текст</b> (${esc(ai.model)}), базиран само на данните по-долу:</small><br>${esc(ai.texts[h.key])}</p>` : ''}
@@ -60,7 +62,7 @@ export function buildResultEmail(rec, ai, publicUrl, plans = {}) {
   const html = `<!doctype html><html><body style="font-family:Arial,sans-serif;color:#1d1d1b;max-width:680px;margin:auto;padding:16px">
     <h1 style="color:#0b2554;margin-bottom:0">Future Jobs</h1><p style="margin-top:4px">Твоят план за бъдещите умения</p>
     <p>Интереси: <b>${esc(rec.profile.topInterests.join(', '))}</b>. Данни към: ${esc(rec.dataAsOf ? new Date(rec.dataAsOf).toLocaleString('bg-BG', { timeZone: 'Europe/Sofia' }) : 'няма импорт')}.</p>
-    <h2>Професии, подходящи за теб</h2><ul>${occ}</ul>
+    <h2>Професии, подходящи за теб</h2><ul>${occ}</ul>${fut}${trans ? `<h3>Твоят преход</h3><ul>${trans}</ul>` : ''}
     <h2>Умения по хоризонти</h2>${hz}
     <hr><p><small>${rec.disclaimers.map(esc).join('<br>')}</small></p>
     <p><small>Източници: Eurostat, ESCO, Cedefop Skills Forecast 2025, WEF Future of Jobs 2025, обяви от Arbeitnow и Remotive.</small></p>

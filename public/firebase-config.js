@@ -13,10 +13,11 @@ export const FIREBASE = {
     appId: '1:289559513054:web:bc5e7a030c93a931887f4f',
   },
   appCheck: {
-    // 'v3' – ключ от reCAPTCHA v3 (Secret key е въведен във Firebase → App Check → reCAPTCHA)
-    // 'enterprise' – ключ от Google Cloud Fraud Defense / reCAPTCHA Enterprise
-    provider: 'v3',
-    siteKey: '6Le4TAcuAAAAAFBcd5J6HjEXBPvc-CZtccvGVrg_',
+    // reCAPTCHA Enterprise (Google Cloud Fraud Defense, безплатно ниво Essentials – без карта).
+    // reCAPTCHA v3 (Classic) вече не се поддържа за нови ключове.
+    // Докато siteKey е празен, Firebase пътят се пропуска и личният план идва от сървъра (/api/plan).
+    provider: 'enterprise',
+    siteKey: '',
   },
   // Бърз и евтин модел от безплатния план (Gemini Developer API)
   model: 'gemini-3.5-flash-lite',

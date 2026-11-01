@@ -156,6 +156,18 @@ export const SKILLS = [
     ],
   },
   {
+    id: 'ai_ethics', name: 'Етика и регулация на ИИ', en: 'AI ethics & regulation', category: 'tech',
+    description: 'Отговорно използване на ИИ: рискове, прозрачност, защита на данните и изискванията на Регламента на ЕС за ИИ.',
+    patterns: ['ai act', 'ai governance', 'responsible ai', 'ai ethics', 'trustworthy ai', 'ai compliance', 'ai risk', 'algorithmic audit',
+      'ki-verordnung', 'ki-governance', 'етика на ии', 'регламент за ии'],
+    escoQuery: 'ethics', iscoGroups: ['2'],
+    resources: [
+      { title: 'Ethics of AI', url: 'https://ethics-of-ai.mooc.fi/', provider: 'University of Helsinki', free: true, lang: 'en' },
+      { title: 'Elements of AI (има и на български)', url: 'https://www.elementsofai.com/', provider: 'University of Helsinki / MinnaLearn', free: true, lang: 'bg/en' },
+      { title: 'Регламент (ЕС) 2024/1689 за изкуствения интелект', url: 'https://eur-lex.europa.eu/eli/reg/2024/1689/oj', provider: 'EUR-Lex', free: true, lang: 'bg' },
+    ],
+  },
+  {
     id: 'analytical_thinking', name: 'Аналитично и критично мислене', en: 'Analytical thinking', category: 'human',
     description: 'Разлагане на проблеми, оценка на информация и вземане на обосновани решения.',
     patterns: ['analytical', 'analytisch', 'problem solving', 'problem-solving', 'problemlösung', 'critical thinking', 'kritisches denken', 'аналитично'],
