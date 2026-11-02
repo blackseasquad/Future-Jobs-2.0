@@ -282,6 +282,7 @@ export function futureSummary(f) {
   const closest = OCCUPATION_BY_ID.get(f.closestToday);
   return {
     id: f.id, title: f.title, description: f.description, expected: f.expected, driver: f.driver, evidence: f.evidence, stage: 'emerging',
+    dynamic: Boolean(f.dynamic), addedAt: f.addedAt || null,
     closestToday: closest ? { id: closest.id, title: closest.title } : null,
     coreSkills: f.coreSkills.map((id) => ({ id, name: SKILL_BY_ID.get(id)?.name })),
     complementarySkills: f.complementarySkills.map((id) => ({ id, name: SKILL_BY_ID.get(id)?.name })),

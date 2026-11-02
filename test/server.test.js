@@ -101,7 +101,7 @@ test('препоръки и изпращане на имейл (без запи�
   assert.ok(!JSON.stringify(log).includes('ucenik'));
 });
 
-test('статичните файлове не излизат извън public/', async () => {
+test('статичните файлове не излизат извън папката на frontend-а', async () => {
   const r = await fetch(`${base}/..%2F.env.example`);
   assert.ok([403, 404].includes(r.status));
   const idx = await fetch(`${base}/`);

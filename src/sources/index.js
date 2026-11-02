@@ -4,6 +4,7 @@ import { esco } from './esco.js';
 import { arbeitnow, remotive } from './jobboards.js';
 import { adzuna } from './adzuna.js';
 import { wef, cedefop } from './published.js';
+import { aiCatalog } from '../model/discovery.js';
 
 // Редът е важен: бързите източници първо, ESCO и Adzuna (много заявки) – последни.
 export const SOURCE_META = [
@@ -41,6 +42,12 @@ export const SOURCE_META = [
     id: 'adzuna', name: 'Adzuna Jobs API', kind: 'api', url: 'https://developer.adzuna.com/',
     updateFrequency: 'Ежедневно', terms: 'Изисква безплатна регистрация (app_id/app_key). Не покрива България.',
     requiresKey: true, adapter: adzuna,
+  },
+  {
+    id: 'ai_catalog', name: 'Gemini – нови умения и професии', kind: 'ai', url: 'https://ai.google.dev/gemini-api/docs',
+    updateFrequency: 'Ежедневно, след обявите (до 3 умения и 1 професия на ден; бъдеща професия – до 1 седмично)',
+    terms: 'Числата (брой обяви, ръст) се изчисляват от Future Jobs; Gemini само описва и свързва записите. Публикуват се с етикет „Ново · AI предложение“; администраторът може да ги скрие.',
+    requiresKey: true, adapter: aiCatalog,
   },
   {
     id: 'eures', name: 'EURES', kind: 'not_integrated', url: 'https://eures.europa.eu/',

@@ -4,7 +4,7 @@
 // умението, периода, първата стъпка и факта с източника. Не измисля статистики –
 // отговорите с непознати проценти/големи числа се отхвърлят и се показва резервният текст.
 import { FIREBASE } from './firebase-config.js';
-import { buildPrompt, validatePlan } from './plan-prompt.js';
+import { buildPrompt, validatePlan } from '../../../src/shared/plan-prompt.js';
 export { buildPrompt, validatePlan };
 
 const CDN = `https://www.gstatic.com/firebasejs/${FIREBASE.sdkVersion}`;
@@ -14,9 +14,9 @@ async function getModel() {
   if (!modelPromise) {
     modelPromise = (async () => {
       const [{ initializeApp }, ai, appCheck] = await Promise.all([
-        import(`${CDN}/firebase-app.js`),
-        import(`${CDN}/firebase-ai.js`),
-        import(`${CDN}/firebase-app-check.js`),
+        import(/* @vite-ignore */ `${CDN}/firebase-app.js`),
+        import(/* @vite-ignore */ `${CDN}/firebase-ai.js`),
+        import(/* @vite-ignore */ `${CDN}/firebase-app-check.js`),
       ]);
       const app = initializeApp(FIREBASE.config);
       if (FIREBASE.appCheck?.siteKey) {
@@ -58,7 +58,7 @@ export async function personalPlan(ctx) {
 
 /** Кратка проверка за администратора (един малък заявка към Gemini). */
 export async function pingGemini() {
-  if (!FIREBASE.appCheck?.siteKey) throw new Error('App Check не е настроен – във public/firebase-config.js липсва reCAPTCHA Enterprise site key');
+  if (!FIREBASE.appCheck?.siteKey) throw new Error('App Check не е настроен – във web/src/lib/firebase-config.js липсва reCAPTCHA Enterprise site key');
   const model = await getModel();
   const t0 = performance.now();
   const r = await model.generateContent('Върни JSON {"why":"ok","steps":["a","b","c"]}');

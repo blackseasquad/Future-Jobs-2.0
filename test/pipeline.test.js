@@ -115,5 +115,5 @@ test('режим window=sofia изпълнява само в 06:xx ч. по Со
 test('миграциите са идемпотентни', () => {
   const db = openDb(':memory:');
   assert.doesNotThrow(() => { migrate(db); migrate(db); });
-  assert.equal(count(db, 'SELECT COUNT(*) n FROM schema_migrations'), 1);
+  assert.equal(count(db, 'SELECT COUNT(*) n FROM schema_migrations'), 2);
 });

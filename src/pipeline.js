@@ -5,6 +5,7 @@ import { computeSkillMetrics } from './model/scoring.js';
 import { fetchJson as realFetchJson } from './lib/http.js';
 import { sofiaDate, zonedParts } from './lib/time.js';
 import { setMeta } from './db.js';
+import { applyDynamicCatalog } from './catalog/registry.js';
 
 const LOCK_NAME = 'daily-refresh';
 const LOCK_STALE_MS = 2 * 3600 * 1000;
@@ -27,7 +28,7 @@ function releaseLock(db, runId) {
 /**
  * @param {import('node:sqlite').DatabaseSync} db
  * @param {{config:any, trigger:string, force?:boolean, onlyInSofiaHour?:number|null,
- *          fetchJson?:Function, now?:()=>Date, log?:(m:string)=>void, sources?:string[], politeDelayMs?:number, deadlineMs?:number}} opts
+ *          fetchJson?:Function, now?:()=>Date, log?:(m:string)=>void, sources?:string[], politeDelayMs?:number, deadlineMs?:number, geminiFetch?:any}} opts
  */
 export async function runRefresh(db, opts) {
   const now = opts.now || (() => new Date());
@@ -60,6 +61,7 @@ export async function runRefresh(db, opts) {
   const results = [];
   try {
     const fetchJson = opts.fetchJson || realFetchJson;
+    applyDynamicCatalog(db); // динамичните умения участват в разпознаването на обявите
     const selected = SOURCE_META.filter((s) => s.adapter && (!opts.sources || opts.sources.includes(s.id)));
     const deadline = opts.deadlineMs ? start.getTime() + opts.deadlineMs : null;
     for (const meta of selected) {
@@ -75,7 +77,7 @@ export async function runRefresh(db, opts) {
       const srcStart = now().toISOString();
       const sr = db.prepare(`INSERT INTO source_runs(run_id, source_id, status, started_at) VALUES (?, ?, 'running', ?)`).run(runId, meta.id, srcStart);
       const srId = Number(sr.lastInsertRowid);
-      const ctx = { db, config: opts.config, fetchJson, nowIso: srcStart, log, force: !!opts.force, politeDelayMs: opts.politeDelayMs, deadline };
+      const ctx = { db, config: opts.config, fetchJson, nowIso: srcStart, log, force: !!opts.force, politeDelayMs: opts.politeDelayMs, deadline, geminiFetch: opts.geminiFetch };
       try {
         const r = /** @type {any} */ (await meta.adapter.run(ctx));
         if (r?.skipped) {
@@ -109,7 +111,7 @@ export async function runRefresh(db, opts) {
     const ok = results.filter((r) => r.status === 'success');
     const failed = results.filter((r) => r.status === 'failed');
     // Реални (живи) източници – не броим публикуваните доклади, които са локални
-    const liveOk = ok.filter((r) => !['wef', 'cedefop'].includes(r.source));
+    const liveOk = ok.filter((r) => !['wef', 'cedefop', 'ai_catalog'].includes(r.source));
     let metrics = null;
     let status;
     if (liveOk.length === 0) {

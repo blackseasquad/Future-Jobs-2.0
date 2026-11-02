@@ -42,10 +42,12 @@ export const ESCO_HEADERS = {
   'User-Agent': 'Mozilla/5.0 (compatible; FutureJobs/1.0; EduHack.bg student project)',
 };
 
-export const ESCO_TARGETS = [
+/** Целите за ESCO (включително динамичните умения и професии от каталога). */
+export const escoTargets = () => [
   ...SKILLS.map((s) => ({ type: 'skill', localId: s.id, query: s.escoQuery })),
   ...OCCUPATIONS.map((o) => ({ type: 'occupation', localId: o.id, query: o.escoQuery })),
 ];
+export const ESCO_TARGETS = escoTargets();
 
 /** Търси и изтегля едно ESCO понятие. Използва се от импорта и от scripts/esco-snapshot.js. */
 export async function fetchEscoConcept(fetchJson, t, timeoutMs) {
@@ -98,7 +100,7 @@ export const esco = {
     let stoppedEarly = 0;
     let blockedErr = null;
     const pending = [];
-    for (const t of ESCO_TARGETS) {
+    for (const t of escoTargets()) {
       const fresh = ctx.db.prepare('SELECT uri FROM esco_concepts WHERE local_id = ? AND type = ? AND fetched_at >= ?')
         .get(t.localId, t.type, cutoff);
       if (fresh && !ctx.force) { stats.duplicates++; continue; }

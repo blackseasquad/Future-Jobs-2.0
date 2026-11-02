@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { buildPrompt, validatePlan } from '../public/gemini.js';
+import { buildPrompt, validatePlan } from '../src/shared/plan-prompt.js';
 
 const ctx = { answers: [{ question: 'Какво обичаш?', answer: 'Да помагам' }], interests: ['Грижа и помощ'], skill: 'Комуникация', description: 'Ясно изразяване',
   horizon: 'Сега (6–12 месеца)', firstStep: 'Запиши видео', fact: 'Споменава се в 24,7% от обявите (Arbeitnow, 30 дни)', occupation: 'Медицинска сестра' };

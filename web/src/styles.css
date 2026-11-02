@@ -382,3 +382,15 @@ a.chip.fchip-l { color: #5b2d91; background: #f3ecfc; }
 .trans-row { display: flex; flex-direction: column; gap: 2px; padding-top: 8px; border-top: 1px dashed var(--line); }
 .opt small { display: block; font-weight: 500; color: var(--muted); font-size: 13px; margin-top: 2px; }
 .hero h1 .nw { color: var(--ink); }
+/* еднаква височина на заглавията на трите периода */
+.hz-head { flex-wrap: nowrap; align-items: center; min-height: 64px; }
+.hz-head .t { white-space: nowrap; }
+.hz-head .s { white-space: nowrap; text-align: right; }
+@media (max-width: 380px) { .hz-head { flex-wrap: wrap; } }
+
+/* ---------------- React версия: допълнения */
+.b-new { background: #f3ecfc; color: #5b2d91; }
+.th-btn { all: unset; cursor: pointer; }
+.th-btn:focus-visible { outline: 3px solid var(--cyan); }
+.btn-sm { min-height: 30px; padding: 4px 10px; font-size: 13px; margin-left: 8px; }
+.fa-send:disabled { opacity: .6; cursor: progress; }

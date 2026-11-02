@@ -66,5 +66,15 @@ export function upsertPosting(db, p, skills, nowIso) {
       p.url || null, postedAt, nowIso, nowIso, dedupeKey);
   const ins = db.prepare('INSERT OR IGNORE INTO posting_skills(posting_id, skill_id) VALUES (?, ?)');
   for (const s of new Set(skills)) ins.run(r.lastInsertRowid, s);
+  if (Array.isArray(p.terms) && p.terms.length) {
+    const it = db.prepare('INSERT OR IGNORE INTO posting_terms(posting_id, term) VALUES (?, ?)');
+    for (const t of new Set(p.terms.map(normalizeTerm).filter(Boolean))) it.run(r.lastInsertRowid, t);
+  }
   return 'inserted';
+}
+
+/** Нормализира етикет от обява: малки букви, без излишни знаци, 2–40 символа. */
+export function normalizeTerm(t) {
+  const s = String(t ?? '').toLowerCase().replace(/[\u0000-\u001f]/g, ' ').replace(/\s+/g, ' ').trim();
+  return s.length >= 2 && s.length <= 40 && /\p{L}/u.test(s) ? s : null;
 }

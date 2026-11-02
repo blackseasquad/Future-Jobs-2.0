@@ -6,7 +6,7 @@
 // wefFastest/wefLargest – ключове от WEF_2025 (catalog/published.js), ако професията
 //              съответства на позиция в списъците на доклада.
 
-/** @typedef {{id:string,nace:string,title:string,description:string,escoQuery:string,isco:string,isco2:string,interests:Record<string,number>,coreSkills:string[],complementarySkills:string[],wefFastest?:string,wefLargest?:string}} Occupation */
+/** @typedef {{id:string,nace:string,title:string,description:string,escoQuery:string,isco:string,isco2:string,interests:Record<string,number>,coreSkills:string[],complementarySkills:string[],wefFastest?:string,wefLargest?:string,dynamic?:boolean,addedAt?:string,aiEvidence?:any}} Occupation */
 
 /** @type {Occupation[]} */
 export const OCCUPATIONS = [

@@ -174,6 +174,41 @@ const MIGRATIONS = [
     );
     `,
   },
+  {
+    version: 2,
+    name: 'dynamic catalog (AI-discovered skills and occupations)',
+    sql: `
+    -- Етикети (tags) от обявите – за откриване на нови, растящи умения
+    CREATE TABLE IF NOT EXISTS posting_terms (
+      posting_id INTEGER NOT NULL REFERENCES job_postings(id),
+      term TEXT NOT NULL,
+      PRIMARY KEY (posting_id, term)
+    );
+    CREATE INDEX IF NOT EXISTS idx_posting_terms_term ON posting_terms(term);
+    -- Динамичен каталог: умения/професии, добавени при ежедневното обновяване (описани от Gemini).
+    -- Нищо не се изтрива – администраторът само ги скрива (status = 'hidden').
+    CREATE TABLE IF NOT EXISTS dyn_catalog (
+      kind TEXT NOT NULL,            -- skill | occupation | future
+      id TEXT NOT NULL,
+      data TEXT NOT NULL,            -- JSON на записа
+      status TEXT NOT NULL DEFAULT 'active',
+      origin TEXT NOT NULL,          -- етикет / длъжност / умение, от което е открит
+      evidence TEXT NOT NULL,        -- JSON с числа, изчислени от кода (не от ИИ)
+      model TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      PRIMARY KEY (kind, id)
+    );
+    -- Кандидати, които ИИ е отхвърлил (за да не се питат всеки ден отново)
+    CREATE TABLE IF NOT EXISTS dyn_rejected (
+      kind TEXT NOT NULL,
+      origin TEXT NOT NULL,
+      reason TEXT,
+      at TEXT NOT NULL,
+      PRIMARY KEY (kind, origin)
+    );
+    `,
+  },
 ];
 
 /** @param {string} dbPath */

@@ -8,7 +8,7 @@
 // resources – реални ресурси за обучение (проверявай периодично дали линковете са активни).
 
 /** @typedef {{title:string,url:string,provider:string,free:boolean,lang:string}} Resource */
-/** @typedef {{id:string,name:string,en:string,category:string,description:string,patterns:string[],casePatterns?:string[],escoQuery:string,wef?:string,iscoGroups:string[],resources:Resource[]}} Skill */
+/** @typedef {{id:string,name:string,en:string,category:string,description:string,patterns:string[],casePatterns?:string[],escoQuery:string,wef?:string,iscoGroups:string[],resources:Resource[],dynamic?:boolean,addedAt?:string,aiEvidence?:any}} Skill */
 
 /** @type {Skill[]} */
 export const SKILLS = [
@@ -324,7 +324,7 @@ function escapeRe(s) {
 }
 
 /** Компилира шаблоните до регулярни изрази (граници на думи, поддръжка на кирилица). */
-const COMPILED = SKILLS.map((s) => {
+const compileSkill = (s) => {
   const insensitive = s.patterns.map((p) => {
     const body = escapeRe(p.toLowerCase());
     // Шаблони, завършващи на основа (напр. "креативн"), позволяват окончание
@@ -336,7 +336,11 @@ const COMPILED = SKILLS.map((s) => {
     ? new RegExp(s.casePatterns.map((p) => `(?<![\\p{L}\\p{N}])${escapeRe(p)}(?![\\p{L}\\p{N}])`).join('|'), 'u')
     : null;
   return { id: s.id, re, caseRe };
-});
+};
+let COMPILED = SKILLS.map(compileSkill);
+
+/** Прекомпилира шаблоните (след добавяне на динамични умения от каталога). */
+export function recompileSkills() { COMPILED = SKILLS.map(compileSkill); }
 
 /**
  * Разпознава уменията в текст на обява. Нормализира синонимите до skill id.

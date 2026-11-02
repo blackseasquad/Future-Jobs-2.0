@@ -10,6 +10,7 @@ export function testConfig(over = {}) {
     timezone: 'Europe/Sofia', scheduledHour: 6, staleAfterHours: 36, fetchTimeoutMs: 1000,
     adzuna: { appId: '', appKey: '', countries: ['de'] }, anthropic: { apiKey: '', model: 'test' },
     smtp: { host: '', port: 0, secure: false, user: '', pass: '', from: 'Future Jobs <no-reply@example.com>' },
+    staticDir: new URL('./fixtures/static', import.meta.url).pathname,
     ...over,
   };
 }

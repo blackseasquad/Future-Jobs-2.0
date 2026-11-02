@@ -3,10 +3,10 @@
 // Всяка бъдеща професия има източник, а „доказателствата“ са:
 //   strong – закон или регламент с конкретни дати;  medium – доклади и тенденции.
 
-/** @typedef {{kind:'fact'|'forecast', text:string, source:string, url:string}} Why */
-/** @typedef {{id:string, title:string, description:string, expected:string, driver:string, evidence:'strong'|'medium',
+/** @typedef {{kind:'fact'|'forecast'|'ai', text:string, source:string, url:string|null}} Why */
+/** @typedef {{id:string, title:string, description:string, expected:string, driver:string, evidence:'strong'|'medium'|'ai',
  *   closestToday:string, coreSkills:string[], complementarySkills:string[], interests:Record<string,number>,
- *   path:string[], why:Why[], note?:string}} FutureOccupation */
+ *   path:string[], why:Why[], note?:string, dynamic?:boolean, addedAt?:string}} FutureOccupation */
 
 /** @type {FutureOccupation[]} */
 export const FUTURE_OCCUPATIONS = [

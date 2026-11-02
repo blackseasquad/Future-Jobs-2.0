@@ -30,6 +30,7 @@ export function normalizeArbeitnow(j) {
     url: j.url || null,
     postedAt: typeof j.created_at === 'number' ? new Date(j.created_at * 1000).toISOString() : j.created_at || null,
     text: [j.title, (j.tags || []).join(' '), (j.job_types || []).join(' '), stripHtml(j.description)].join(' \n '),
+    terms: Array.isArray(j.tags) ? j.tags.slice(0, 20) : [],
   };
 }
 
@@ -45,6 +46,7 @@ export function normalizeRemotive(j) {
     url: j.url || null,
     postedAt: j.publication_date || null,
     text: [j.title, j.category || '', Array.isArray(j.tags) ? j.tags.join(' ') : '', stripHtml(j.description)].join(' \n '),
+    terms: Array.isArray(j.tags) ? j.tags.slice(0, 20) : [],
   };
 }
 

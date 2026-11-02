@@ -14,10 +14,11 @@ import { QUIZ, INTERESTS, ADULT_SITUATIONS, quizFor } from './catalog/quiz.js';
 import { latestSkillMetrics, skillHistory, occupationOutlook, employmentTrend, WEIGHTS, MODEL_VERSION, MIN_POSTINGS } from './model/scoring.js';
 import { recommend, salaryFor, planFor, futureSummary, changingSummary } from './model/recommend.js';
 import { FUTURE_OCCUPATIONS, FUTURE_BY_ID, CHANGING_JOBS, CHANGING_SOURCE } from './catalog/future.js';
+import { applyDynamicCatalog, listDynamic } from './catalog/registry.js';
 import { explainWithAi } from './ai.js';
 import { streamWithFallback } from './assistant/gemini.js';
 import { buildSystemInstruction } from './assistant/knowledge.js';
-import { buildPrompt, validatePlan, answersToText } from '../public/plan-prompt.js';
+import { buildPrompt, validatePlan, answersToText } from './shared/plan-prompt.js';
 import { buildResultEmail, sanitizePlans, sendSmtp, isValidEmail, hashEmail, explainSmtpError } from './email.js';
 import { runRefresh, AlreadyRunningError } from './pipeline.js';
 import { localProvider, blobProvider, loadVercelBlob, StorageConflictError } from './storage.js';
@@ -144,7 +145,7 @@ export function createHandler({ db: initialDb, provider, config, refreshImpl = r
     const states = new Map(db.prepare('SELECT * FROM source_state').all().map((r) => [String(r.source_id), r]));
     const sources = SOURCE_META.map((s) => {
       const st = states.get(s.id);
-      const configured = s.id === 'adzuna' ? Boolean(config.adzuna.appId && config.adzuna.appKey) : true;
+      const configured = s.id === 'adzuna' ? Boolean(config.adzuna.appId && config.adzuna.appKey) : s.id === 'ai_catalog' ? Boolean(config.gemini?.apiKey) : true;
       let status = 'never';
       if (s.kind === 'not_integrated') status = 'not_integrated';
       else if (!configured) status = 'not_configured';
@@ -185,6 +186,7 @@ export function createHandler({ db: initialDb, provider, config, refreshImpl = r
   function skillSummary(s, m) {
     return {
       id: s.id, name: s.name, en: s.en, category: s.category, description: s.description,
+      dynamic: Boolean(s.dynamic), addedAt: s.addedAt || null,
       score: m?.score ?? null, confidence: m?.confidence ?? 'insufficient', date: m?.date ?? null,
       demandShare: m?.demand_share ?? null, postings: m?.postings_with_skill ?? null, postingsTotal: m?.postings_total ?? null,
       change30: m?.change_30d ?? null, change90: m?.change_90d ?? null, longTerm: m?.long_term ?? null,
@@ -210,6 +212,7 @@ export function createHandler({ db: initialDb, provider, config, refreshImpl = r
       outlook: { index: outlook.index, signals: outlook.signals },
       salary: salaryFor(db, o),
       esco,
+      dynamic: Boolean(o.dynamic), addedAt: o.addedAt || null, aiEvidence: o.dynamic ? o.aiEvidence : null,
     };
   }
 
@@ -231,10 +234,25 @@ export function createHandler({ db: initialDb, provider, config, refreshImpl = r
         options: q.options.map((o) => ({ id: o.id, text: o.text, adultText: o.adultText, studentText: o.studentText, note: o.note })),
       })) });
     }
+    if (req.method === 'GET' && p === '/api/catalog/new') return send(res, 200, { items: listDynamic(db) });
+    if (req.method === 'GET' && p === '/api/admin/catalog') {
+      requireSecret(req, config.adminToken, 'x-admin-token');
+      return send(res, 200, { items: listDynamic(db, { includeHidden: true }) });
+    }
+    if (req.method === 'POST' && p === '/api/admin/catalog') {
+      requireSecret(req, config.adminToken, 'x-admin-token');
+      const body = await readJson(req);
+      if (!['skill', 'occupation', 'future'].includes(body.kind) || typeof body.id !== 'string') throw new HttpError(400, 'Невалиден запис');
+      const status = body.hidden ? 'hidden' : 'active';
+      const changed = await provider.write(async (wdb) => wdb.prepare(`UPDATE dyn_catalog SET status = ?, updated_at = ? WHERE kind = ? AND id = ?`)
+        .run(status, new Date().toISOString(), body.kind, body.id).changes);
+      if (!changed) throw new HttpError(404, 'Няма такъв запис');
+      return send(res, 200, { ok: true, status });
+    }
     if (req.method === 'GET' && p === '/api/future') {
       return send(res, 200, { future: FUTURE_OCCUPATIONS.map(futureSummary), changing: CHANGING_JOBS.map(changingSummary), changingSource: CHANGING_SOURCE });
     }
-    const fm = p.match(/^\/api\/future\/([a-z_]+)$/);
+    const fm = p.match(/^\/api\/future\/([a-z0-9_]+)$/);
     if (req.method === 'GET' && fm) {
       const f = FUTURE_BY_ID.get(fm[1]);
       if (!f) throw new HttpError(404, 'Няма такава бъдеща професия');
@@ -250,13 +268,13 @@ export function createHandler({ db: initialDb, provider, config, refreshImpl = r
       const m = latestSkillMetrics(db);
       return send(res, 200, { skills: SKILLS.map((s) => skillSummary(s, m.get(s.id))), weights: WEIGHTS, modelVersion: MODEL_VERSION, minPostings: MIN_POSTINGS });
     }
-    let mm = p.match(/^\/api\/skills\/([a-z_]+)$/);
+    let mm = p.match(/^\/api\/skills\/([a-z0-9_]+)$/);
     if (req.method === 'GET' && mm) {
       const s = SKILL_BY_ID.get(mm[1]);
       if (!s) throw new HttpError(404, 'Няма такова умение');
       const m = latestSkillMetrics(db).get(s.id);
       return send(res, 200, {
-        ...skillSummary(s, m), resources: s.resources, synonyms: s.patterns, firstStep: planFor(s, 'mid').firstStep,
+        ...skillSummary(s, m), resources: s.resources, synonyms: s.patterns, aiEvidence: s.dynamic ? s.aiEvidence : null, firstStep: planFor(s, 'mid').firstStep,
         details: m?.details ? { ...m.details, cooccurrence: (m.details.cooccurrence || []).map((c) => ({ ...c, name: SKILL_BY_ID.get(c.skill)?.name || c.skill })) } : null,
         history: skillHistory(db, s.id), esco: escoFor('skill', s.id),
         occupations: OCCUPATIONS.filter((o) => o.coreSkills.includes(s.id) || o.complementarySkills.includes(s.id)).map((o) => ({ id: o.id, title: o.title, core: o.coreSkills.includes(s.id) })),
@@ -264,7 +282,7 @@ export function createHandler({ db: initialDb, provider, config, refreshImpl = r
       });
     }
     if (req.method === 'GET' && p === '/api/occupations') return send(res, 200, { occupations: OCCUPATIONS.map(occSummary) });
-    mm = p.match(/^\/api\/occupations\/([a-z_]+)$/);
+    mm = p.match(/^\/api\/occupations\/([a-z0-9_]+)$/);
     if (req.method === 'GET' && mm) {
       const o = OCCUPATION_BY_ID.get(mm[1]);
       if (!o) throw new HttpError(404, 'Няма такава професия');
@@ -426,14 +444,19 @@ export function createHandler({ db: initialDb, provider, config, refreshImpl = r
     return send(res, 202, { accepted: true, message: 'Обновяването е стартирано. Следи статуса в /api/status.' });
   }
 
+  // Готовото React приложение (npm run build → dist/). На Vercel статичните файлове се сервират от CDN-а.
   function serveStatic(req, res, url) {
-    const publicDir = path.join(ROOT, 'public');
+    const publicDir = config.staticDir || path.join(ROOT, 'dist');
     let rel = decodeURIComponent(url.pathname);
     if (rel === '/' || !path.extname(rel)) rel = '/index.html';
     const file = path.normalize(path.join(publicDir, rel));
-    if (!file.startsWith(publicDir)) return send(res, 403, 'Forbidden');
-    if (!fs.existsSync(file) || !fs.statSync(file).isFile()) return send(res, 404, 'Not found');
-    send(res, 200, fs.readFileSync(file), { 'Content-Type': MIME[path.extname(file)] || 'application/octet-stream', 'Cache-Control': 'no-cache' });
+    if (!file.startsWith(publicDir + path.sep)) return send(res, 403, 'Forbidden');
+    if (!fs.existsSync(file) || !fs.statSync(file).isFile()) {
+      if (rel === '/index.html') return send(res, 503, 'Frontend-ът още не е компилиран. Изпълни: npm run build');
+      return send(res, 404, 'Not found');
+    }
+    const cache = rel.startsWith('/assets/') ? 'public, max-age=31536000, immutable' : 'no-cache';
+    send(res, 200, fs.readFileSync(file), { 'Content-Type': MIME[path.extname(file)] || 'application/octet-stream', 'Cache-Control': cache });
   }
 
   return async (req, res) => {
@@ -441,6 +464,7 @@ export function createHandler({ db: initialDb, provider, config, refreshImpl = r
     try {
       if (url.pathname.startsWith('/api/')) {
         db = await provider.read();
+        applyDynamicCatalog(db);
         await handleApi(req, res, url);
       }
       else if (req.method === 'GET' || req.method === 'HEAD') serveStatic(req, res, url);
