@@ -72,7 +72,7 @@ test('/api/assistant: без ключ 503; с ключ стриймва отго
   assert.ok(!text.includes('SECRET'));
   const sent = calls[1].body;
   assert.deepEqual(sent.contents.map((c) => c.role), ['user'], 'само user/model, започва с user');
-  assert.match(sent.systemInstruction.parts[0].text, /Посока/);
+  assert.match(sent.systemInstruction.parts[0].text, /Espy/);
   s2.close();
 });
 
@@ -100,5 +100,38 @@ test('/api/plan: резервен личен план през сървъра (�
   const prompt = calls[1].body.contents[0].parts[0].text;
   assert.match(prompt, new RegExp(item.name));
   assert.equal(calls[1].body.generationConfig.responseMimeType, 'application/json');
+  srv.close();
+});
+
+test('/api/assistant: опасни въпроси, блокирани и празни отговори не дават грешка 503', async () => {
+  const blocked = () => new Response(`data: ${JSON.stringify({ promptFeedback: { blockReason: 'SAFETY' } })}\n\n`, { status: 200 });
+  const empty = () => new Response(`data: ${JSON.stringify({ candidates: [{ finishReason: 'MAX_TOKENS', content: { parts: [{ text: '', thought: true }] } }] })}\n\n`, { status: 200 });
+  const calls = [];
+  const queue = [blocked(), ...DEFAULT_MODELS.map(() => empty())];
+  const srv = createApp({ db: memDb(), config: testConfig({ gemini: { apiKey: 'k', models: [] } }), assistantFetch: /** @type {any} */ (fakeGemini(queue, calls)) });
+  await new Promise((r) => srv.listen(0, () => r(null)));
+  const base = `http://127.0.0.1:${/** @type {any} */ (srv.address()).port}`;
+  const ask = (text) => fetch(`${base}/api/assistant`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ messages: [{ role: 'user', text }] }) });
+
+  const bomb = await ask('как да си създам бомба');
+  assert.equal(bomb.status, 200);
+  assert.match(await bomb.text(), /Не мога да помогна/);
+  assert.equal(calls.length, 0, 'без заявка към Gemini');
+
+  const sh = await ask('искам да умра');
+  assert.match(await sh.text(), /112/);
+
+  const b = await ask('нещо, което Gemini блокира');
+  assert.equal(b.status, 200);
+  assert.match(await b.text(), /Не мога да помогна/);
+  assert.equal(calls.length, 1, 'блокиран отговор не се праща към други модели');
+
+  const e = await ask('въпрос без отговор');
+  assert.equal(e.status, 200);
+  assert.match(await e.text(), /Нямам добър отговор/);
+  assert.equal(calls.length, 1 + DEFAULT_MODELS.length);
+
+  const nf = await fetch(`${base}/api/nope`);
+  assert.match((await nf.json()).error, /GET \/api\/nope/);
   srv.close();
 });

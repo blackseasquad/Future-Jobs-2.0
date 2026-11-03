@@ -1,9 +1,9 @@
-// Плаващ чат асистент „Посока“. Говори само с /api/assistant; ключът за Gemini е на сървъра.
+// Плаващ чат асистент Espy. Говори само с /api/assistant; ключът за Gemini е на сървъра.
 import { Fragment, useEffect, useRef, useState } from 'react';
 
 const STORE = 'fj-assistant-v1';
 const SUGGESTIONS = ['Как работи анкетата?', 'Откъде са данните?', 'Кои са професиите на бъдещето?', 'Какво значи „ниска увереност“?'];
-const GREETING = 'Здравей! Аз съм **Посока** – помощникът на Future Jobs. Питай ме как работи приложението, откъде са данните или къде да намериш нещо.';
+const GREETING = 'Здравей! Аз съм **Espy** – помощникът на Future Jobs. Питай ме как работи приложението, откъде са данните или къде да намериш нещо.';
 
 /** Безопасен мини markdown: **удебелен**, _наклонен_, [текст](#/път), списъци. Само вътрешни линкове. */
 function Inline({ text }) {
@@ -94,7 +94,7 @@ export default function Assistant() {
       <section className="fa-panel" id="fa-panel" role="dialog" aria-modal="false" aria-labelledby="fa-title" hidden={!open && !shown}>
         <header className="fa-head">
           <span className="fa-avatar" aria-hidden="true"><img src="/wave-sm.png" alt="" width="26" height="23" /></span>
-          <div className="fa-title"><b id="fa-title">Посока</b><span>AI асистент · Gemini</span></div>
+          <div className="fa-title"><b id="fa-title">Espy</b><span>AI асистент · Gemini</span></div>
           <button className="fa-icon" type="button" onClick={clear} title="Изчисти разговора" aria-label="Изчисти разговора">↺</button>
           <button className="fa-icon" type="button" onClick={() => { setOpen(false); fabRef.current?.focus(); }} title="Затвори" aria-label="Затвори асистента">✕</button>
         </header>
@@ -116,9 +116,9 @@ export default function Assistant() {
         </form>
         <p className="fa-note">AI текст – може да греши. Не пиши лични данни.</p>
       </section>
-      <button ref={fabRef} className="fa-fab" type="button" aria-controls="fa-panel" aria-expanded={open} aria-label={open ? 'Затвори AI асистента' : 'Отвори AI асистента'} onClick={() => setOpen((o) => !o)}>
+      <button ref={fabRef} className="fa-fab" type="button" aria-controls="fa-panel" aria-expanded={open} aria-label={open ? 'Затвори асистента Espy' : 'Отвори асистента Espy'} onClick={() => setOpen((o) => !o)}>
         <span className="fa-fab-open" aria-hidden="true">✦</span><span className="fa-fab-close" aria-hidden="true">✕</span>
-        <span className="fa-fab-label">Попитай Посока</span>
+        <span className="fa-fab-label">Попитай Espy</span>
       </button>
     </div>
   );

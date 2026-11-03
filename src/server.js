@@ -39,6 +39,14 @@ class HttpError extends Error {
   constructor(status, message) { super(message); this.status = status; }
 }
 
+// Асистентът: отказ за опасни теми и отговор, когато моделът няма какво да каже.
+const DANGEROUS_RE = /бомб|експлоз|взрив|оръжи|огнестрел|пистолет|патрон|отров|bomb|explosiv|weapon|firearm|\bgun\b|poison/i;
+const SELF_HARM_RE = /самоуб|самонаран|да се убия|искам да умра|suicid|kill myself|self.?harm/i;
+const isDangerous = (t) => DANGEROUS_RE.test(String(t));
+const SELF_HARM_REPLY = 'Съжалявам, че ти е тежко. Не си сам(а) – говори с човек, на когото имаш доверие: родител, приятел, учител или училищния психолог. Ако си в непосредствена опасност, обади се на **112**. Тук съм и за въпроси за учене и професии, когато си готов(а).';
+const DANGEROUS_REPLY = 'Не мога да помогна с това. Аз съм **Espy** и отговарям на въпроси за Future Jobs – професии, умения, анкетата и данните.';
+const EMPTY_REPLY = 'Нямам добър отговор на този въпрос. Мога да помогна с професиите и уменията в Future Jobs, [анкетата](#/quiz) или откъде са [данните](#/data). Опитай да попиташ по друг начин.';
+
 const SECURITY_HEADERS = {
   'X-Content-Type-Options': 'nosniff',
   'Referrer-Policy': 'strict-origin-when-cross-origin',
@@ -365,7 +373,7 @@ export function createHandler({ db: initialDb, provider, config, refreshImpl = r
       try {
         const r = await streamWithFallback({ apiKey: config.gemini.apiKey, models: config.gemini.models, fetchImpl: assistantFetch,
           systemInstruction: 'Отговаряш само с валиден JSON по зададената схема.', contents: [{ role: 'user', text: prompt }],
-          generationConfig: { temperature: 0.6, maxOutputTokens: 600, responseMimeType: 'application/json',
+          generationConfig: { temperature: 0.6, maxOutputTokens: 2048, responseMimeType: 'application/json',
             responseSchema: { type: 'OBJECT', properties: { why: { type: 'STRING' }, steps: { type: 'ARRAY', items: { type: 'STRING' } } }, required: ['why', 'steps'] } } });
         let text = '';
         for await (const c of r.stream) text += c;
@@ -380,11 +388,20 @@ export function createHandler({ db: initialDb, provider, config, refreshImpl = r
       if (!config.gemini?.apiKey) throw new HttpError(503, 'Асистентът не е конфигуриран (липсва GEMINI_API_KEY).');
       if (!assistantLimit(ip)) throw new HttpError(429, 'Задаваш въпроси твърде бързо. Опитай пак след няколко минути.');
       const contents = chatContents(await readJson(req, 32 * 1024));
+      const reply = (text, model) => { res.writeHead(200, { ...SECURITY_HEADERS, 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store', 'X-Assistant-Model': model }); res.end(text); };
+      // Опасни теми – кратък отказ без заявка към Gemini (същото би направил и моделът)
+      const lastQ = contents[contents.length - 1].text;
+      if (SELF_HARM_RE.test(lastQ)) return reply(SELF_HARM_REPLY, 'guard');
+      if (isDangerous(lastQ)) return reply(DANGEROUS_REPLY, 'guard');
       let result;
       try {
-        result = await streamWithFallback({ apiKey: config.gemini.apiKey, models: config.gemini.models, systemInstruction: buildSystemInstruction(assistantContext()), contents, fetchImpl: assistantFetch });
+        result = await streamWithFallback({ apiKey: config.gemini.apiKey, models: config.gemini.models, systemInstruction: buildSystemInstruction(assistantContext()), contents, fetchImpl: assistantFetch, blockedText: DANGEROUS_REPLY });
       } catch (err) {
-        console.warn(JSON.stringify({ event: 'assistant_failed', error: String(err.message).slice(0, 300), tried: (err.errors || []).map((e) => `${e.model}:${e.status}`) }));
+        const tried = (err.errors || []).map((e) => `${e.model}:${e.status}`);
+        console.warn(JSON.stringify({ event: 'assistant_failed', error: String(err.message).slice(0, 300), tried }));
+        // Всички модели върнаха празен отговор – това не е повреда, а въпрос без отговор
+        if (tried.length && (err.errors || []).every((e) => /празен отговор/.test(e.reason))) return reply(EMPTY_REPLY, 'none');
+        if ((err.errors || []).some((e) => e.status === 429)) throw new HttpError(503, 'Безплатният лимит на Gemini е изчерпан за момента. Опитай отново след няколко минути.');
         throw new HttpError(503, 'Асистентът е зает в момента. Опитай отново след минута.');
       }
       res.writeHead(200, { ...SECURITY_HEADERS, 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store', 'X-Assistant-Model': result.model });
@@ -428,7 +445,7 @@ export function createHandler({ db: initialDb, provider, config, refreshImpl = r
       requireSecret(req, config.adminToken, 'x-admin-token');
       return send(res, 200, { ok: true });
     }
-    throw new HttpError(404, 'Няма такъв endpoint');
+    throw new HttpError(404, `Няма такъв endpoint: ${req.method} ${p}`);
   }
 
   async function runOrAccept(res, opts, wait) {
